@@ -1,0 +1,190 @@
+/** Interface texts. `uz` and `en` must define every key of `ru` (checked by the compiler). */
+export const ru = {
+  appName: 'UzBite Курьер', loading: 'Загрузка…', retry: 'Повторить', cancel: 'Отмена', confirm: 'Подтвердить', save: 'Сохранить', back: 'Назад', next: 'Далее', close: 'Закрыть', open: 'Открыть', more: 'Показать ещё', yes: 'Да', no: 'Нет',
+  offline: 'Нет подключения к интернету', serverDown: 'Сервер недоступен. Проверьте сеть и адрес сервера', realtimeDown: 'Обновления в реальном времени временно недоступны. Данные обновятся при восстановлении связи', sessionExpired: 'Сессия истекла. Войдите снова', genericError: 'Не удалось выполнить действие. Попробуйте ещё раз', startupError: 'Не удалось связаться с сервером',
+
+  email: 'Электронная почта', password: 'Пароль', passwordConfirmation: 'Повторите пароль', firstName: 'Имя', lastName: 'Фамилия', phone: 'Телефон',
+  loginTitle: 'Вход для курьера', loginSubtitle: 'Доставляйте заказы ресторанов UzBite', loginSubmit: 'Войти', toRegister: 'Нет аккаунта? Зарегистрироваться',
+  registerTitle: 'Регистрация курьера', registerSubmit: 'Создать аккаунт', toLogin: 'Уже есть аккаунт? Войти',
+  required: 'Заполните поле', emailInvalid: 'Введите корректную почту', passwordShort: 'Минимум 8 символов', passwordMismatch: 'Пароли не совпадают', phoneInvalid: 'Введите номер, например +998 90 123 45 67',
+  serverTitle: 'Адрес сервера', serverHint: 'Только для разработки: адрес компьютера с API UzBite в той же Wi-Fi сети, например http://192.168.1.10:8081', serverCheck: 'Проверить', serverOk: 'Сервер доступен', serverReset: 'По умолчанию', serverLink: 'Сервер: {url}', serverInvalid: 'Адрес вида http://IP:8081',
+
+  onbTitle: 'Настройка аккаунта', onbStep: 'Шаг {n} из 4', onbPersonal: 'Личные данные', onbPersonalText: 'Проверьте имя и телефон — их увидит ресторан, когда вы везёте его заказ.',
+  onbMode: 'Режим работы', onbSetup: 'Подключение', onbDone: 'Готово', onbDoneText: 'Аккаунт настроен. Включите доступность на главном экране, чтобы получать предложения.', onbFinish: 'Начать работу',
+  modeRESTAURANT: 'Свой ресторан', modeRESTAURANTText: 'Доставляете заказы ресторана, который пригласил вас по коду.', modeFREELANCE: 'Свободные доставки', modeFREELANCEText: 'Получаете заказы ресторанов вашего района. Нужен допуск UzBite.',
+  inviteTitle: 'Код приглашения ресторана', inviteHint: 'Код из 8 символов выдаёт ресторан, например AB3K-7QXZ', inviteClaim: 'Проверить код', inviteFrom: 'Приглашение от ресторана «{name}»', inviteAccept: 'Принять', inviteReject: 'Отклонить', inviteLinked: 'Вы работаете с рестораном «{name}»',
+  areaTitle: 'Город и район', areaCity: 'Город', areaZone: 'Район работы', areaHint: 'Предложения приходят от ресторанов выбранного района. Ваше местоположение не отслеживается.',
+  approvalPENDING: 'Ожидает допуска UzBite', approvalAPPROVED: 'Допущен к свободным доставкам', approvalSUSPENDED: 'Аккаунт заблокирован',
+  permSUSPENDED: 'Аккаунт заблокирован. Обратитесь в поддержку.', permNO_AFFILIATION_OR_APPROVAL: 'Чтобы получать заказы, привяжитесь к ресторану по коду или дождитесь допуска UzBite.',
+  permRestaurant: 'Для режима «Свой ресторан» нужна привязка к ресторану.', permFreelance: 'Свободные доставки откроются после допуска UzBite.',
+
+  tabHome: 'Главная', tabOffers: 'Заказы', tabHistory: 'История', tabProfile: 'Профиль',
+  statusAVAILABLE: 'Доступен', statusUNAVAILABLE: 'Недоступен', statusBUSY: 'Занят', statusOFFLINE: 'Нет соединения',
+  homeAvailability: 'Принимаю заказы', homeBusy: 'Пока идёт доставка, новые предложения не приходят.', homeActive: 'Активная доставка', homeOffers: 'Новые предложения', homeNoOffers: 'Новых предложений нет', homeToday: 'Сегодня', homeDelivered: 'Доставок', homeAccrued: 'Начислено', homeEarnings: 'Заработок',
+
+  offersTitle: 'Предложения', offersEmpty: 'Предложений пока нет. Включите доступность на главной, чтобы получать заказы.', offersLeft: 'Осталось {time}', offersExpired: 'Время вышло',
+  offersStraight: '{km} км по прямой', offersItems: 'Позиций: {n}', offersCash: 'Наличные к получению: {sum}', offersCard: 'Оплачено картой', offersReward: 'Вознаграждение: {sum}', offersNoReward: 'Вознаграждение не указано',
+  offersAccept: 'Принять', offersReject: 'Отклонить', offersRejectTitle: 'Отклонить предложение?', offersReasonOptional: 'Причина (необязательно)',
+  offersChecking: 'Связь прервалась. Проверяем на сервере, принят ли заказ…', offersUnknown: 'Нет связи с сервером. Заказ не считается принятым, пока сервер этого не подтвердит.', offersCheckAgain: 'Проверить снова',
+  offersModeRESTAURANT_COURIER: 'Ваш ресторан', offersModeUZBITE_COURIER: 'Свободная доставка', offersZone: 'Район: {zone}',
+
+  deliveryTitle: 'Заказ №{number}', dsASSIGNED: 'Назначена вам', dsREADY_FOR_PICKUP: 'Готова к выдаче', dsPICKED_UP: 'Заказ у вас', dsON_THE_WAY: 'В пути', dsDELIVERED: 'Доставлено', dsCANCELLED: 'Отменено', dsFAILED: 'Не доставлено', dsSEARCHING: 'Поиск курьера', dsOFFERED: 'Предложено', dsNOT_REQUESTED: 'Не назначена',
+  pickupSection: 'Забрать из ресторана', dropoffSection: 'Доставить покупателю', waitReady: 'Ресторан ещё готовит заказ', isReady: 'Заказ готов к выдаче',
+  routeRestaurant: 'Маршрут к ресторану', routeCustomer: 'Маршрут к покупателю', noCoordinates: 'Координаты не указаны — ориентируйтесь по адресу', call: 'Позвонить',
+  entrance: 'Подъезд {v}', floor: 'Этаж {v}', apartment: 'Кв. {v}', comment: 'Комментарий: {v}', items: 'Состав заказа',
+  payCASH: 'Оплата наличными', payCARD: 'Оплата картой', cashToCollect: 'Получить с покупателя: {sum}', cashDone: 'Наличные получены',
+  actPickup: 'Заказ получен', actStart: 'Начать доставку', actCash: 'Наличные получены', codeLabel: 'Код подтверждения от покупателя', actComplete: 'Заказ доставлен', attemptsLeft: 'Осталось попыток: {n}',
+  actCodeProblem: 'Проблема с кодом', actRelease: 'Отказаться от доставки', actRequestCancel: 'Запросить отмену', reasonLabel: 'Причина', reasonHint: 'От 3 до 500 символов',
+  cfPickup: 'Подтвердить, что вы забрали заказ в ресторане?', cfStart: 'Начать доставку? Покупатель увидит, что заказ в пути.', cfCash: 'Подтвердить, что вы получили {sum} наличными?', cfComplete: 'Завершить доставку с кодом {code}?',
+  cfRelease: 'Отказаться от доставки? Заказ вернётся ресторану.', cfRequestCancel: 'Заказ уже у вас. Отменить можно только с решения ресторана — отправить запрос?', cfCodeProblem: 'Сообщить ресторану, что покупатель не может назвать код? Передачу подтвердит ресторан.',
+  issueOpen: 'Обращение отправлено ресторану. Ждём решения.', issueCANCELLATION_REQUEST: 'Запрос на отмену', issueHANDOFF_CODE_UNAVAILABLE: 'Проблема с кодом',
+  deliveryDone: 'Доставка завершена', deliveryReleased: 'Эта доставка больше не назначена вам', noActive: 'Активной доставки нет',
+  rewardLine: 'Вознаграждение: {sum} · {status}', rewardNONE: 'нет', rewardACCRUED: 'начислено', rewardCONFIRMED: 'подтверждено', rewardPAID: 'выплачено',
+
+  historyTitle: 'История', fAll: 'Все', fCompleted: 'Завершённые', fCancelled: 'Отменённые', fRestaurant: 'Свой ресторан', fFreelance: 'UzBite',
+  outDELIVERED: 'Доставлено', outCANCELLED: 'Отменено', outFAILED: 'Не доставлено', outIN_PROGRESS: 'В работе', historyEmpty: 'Здесь появятся ваши доставки',
+
+  earningsTitle: 'Заработок', eAccrued: 'Начислено', eConfirmed: 'Подтверждено рестораном', ePaid: 'Выплачено', ePending: 'Ожидает выплаты', eCompleted: 'Доставок завершено', eWithout: 'Без вознаграждения', eToday: 'Сегодня: {n} дост., {sum}',
+  eNote: 'Суммы по данным ресторанов. «Выплачено» означает, что ресторан отметил выплату. UzBite деньги не переводит.',
+
+  profileTitle: 'Профиль', personal: 'Личные данные', edit: 'Изменить', workMode: 'Режим работы', restaurants: 'Рестораны', workArea: 'Рабочая зона', notifications: 'Уведомления', language: 'Язык', theme: 'Тема', themeLight: 'Светлая', themeDark: 'Тёмная', support: 'Поддержка', logout: 'Выйти', version: 'Версия {v}', server: 'Сервер',
+  logoutConfirm: 'Выйти из аккаунта?', logoutActive: 'У вас есть активная доставка. После выхода обновления перестанут приходить, но доставка останется за вами.', modeConfirm: 'Сменить режим работы? Открытые предложения будут отозваны.',
+  affEnd: 'Прекратить работу', affEndConfirm: 'Прекратить работу с рестораном «{name}»?', affACTIVE: 'Активна', affENDED: 'Завершена', affEmpty: 'Вы пока не привязаны к ресторанам', affAdd: 'Ввести код приглашения',
+  pushNote: 'Фоновые push-уведомления в этой версии не поддерживаются: события приходят, пока приложение открыто и есть связь, и сохраняются в разделе «Уведомления».',
+
+  notifTitle: 'Уведомления', notifEmpty: 'Уведомлений пока нет', notifReadAll: 'Прочитать все',
+  nOFFER_CREATED: 'Новое предложение доставки', nREADY_FOR_PICKUP: 'Заказ готов к выдаче', nRELEASED_BY_RESTAURANT: 'Ресторан снял назначение', nISSUE_RESOLVED: 'Обращение рассмотрено', nCASH_SETTLED: 'Расчёт наличными подтверждён', nREWARD_CONFIRMED: 'Вознаграждение подтверждено', nREWARD_PAID: 'Выплата вознаграждения отмечена', nOrder: 'Заказ №{number}',
+
+  errINVALID_CREDENTIALS: 'Неверная почта или пароль', errEMAIL_TAKEN: 'Эта почта уже зарегистрирована', errOFFER_TAKEN: 'Этот заказ уже принят другим курьером', errOFFER_EXPIRED: 'Время предложения истекло', errOFFER_WITHDRAWN: 'Предложение больше не действует', errOFFER_REJECTED: 'Вы уже отклонили это предложение',
+  errCOURIER_BUSY: 'У вас уже есть активная доставка', errNOT_READY: 'Ресторан ещё не отметил заказ готовым', errHANDOFF_CODE_INVALID: 'Неверный код', errHANDOFF_LOCKED: 'Попытки ввода кода исчерпаны. Сообщите о проблеме с кодом', errCASH_NOT_CONFIRMED: 'Сначала подтвердите получение наличных',
+  errMODE_NOT_ALLOWED: 'Этот режим пока недоступен для вашего аккаунта', errCOURIER_SUSPENDED: 'Аккаунт курьера заблокирован', errSERVICE_AREA_REQUIRED: 'Укажите город и район работы', errONBOARDING_INCOMPLETE: 'Сначала завершите настройку аккаунта', errWORK_MODE_REQUIRED: 'Выберите режим работы', errAFFILIATION_REQUIRED: 'Введите код приглашения ресторана и примите его',
+  errINVITATION_INVALID: 'Код недействителен, истёк или уже использован', errINVITATION_CODE_FORMAT: 'Код состоит из 8 символов', errALREADY_AFFILIATED: 'Вы уже работаете с этим рестораном', errACTIVE_DELIVERY: 'Сначала завершите текущую доставку этого ресторана', errRATE_LIMIT: 'Слишком много попыток. Подождите немного',
+  errVALIDATION: 'Проверьте заполненные поля', errNETWORK: 'Нет связи с сервером', errTIMEOUT: 'Сервер не ответил вовремя', errSERVER: 'Ошибка на сервере. Попробуйте позже', errREASON_REQUIRED: 'Укажите причину (от 3 до 500 символов)', errNOT_ASSIGNED: 'Эта доставка больше не назначена вам', errPAYMENT_REQUIRED: 'Оплата картой ещё не подтверждена рестораном',
+};
+export type TextKey = keyof typeof ru;
+
+export const uz: Record<TextKey, string> = {
+  appName: 'UzBite Kuryer', loading: 'Yuklanmoqda…', retry: 'Qayta urinish', cancel: 'Bekor qilish', confirm: 'Tasdiqlash', save: 'Saqlash', back: 'Orqaga', next: 'Keyingi', close: 'Yopish', open: 'Ochish', more: 'Yana ko‘rsatish', yes: 'Ha', no: 'Yo‘q',
+  offline: 'Internet aloqasi yo‘q', serverDown: 'Server mavjud emas. Tarmoq va server manzilini tekshiring', realtimeDown: 'Real vaqtdagi yangilanishlar vaqtincha ishlamayapti. Aloqa tiklanganda ma’lumotlar yangilanadi', sessionExpired: 'Sessiya tugadi. Qaytadan kiring', genericError: 'Amalni bajarib bo‘lmadi. Qayta urinib ko‘ring', startupError: 'Server bilan bog‘lanib bo‘lmadi',
+
+  email: 'Elektron pochta', password: 'Parol', passwordConfirmation: 'Parolni takrorlang', firstName: 'Ism', lastName: 'Familiya', phone: 'Telefon',
+  loginTitle: 'Kuryer uchun kirish', loginSubtitle: 'UzBite restoranlari buyurtmalarini yetkazing', loginSubmit: 'Kirish', toRegister: 'Akkaunt yo‘qmi? Ro‘yxatdan o‘tish',
+  registerTitle: 'Kuryer sifatida ro‘yxatdan o‘tish', registerSubmit: 'Akkaunt yaratish', toLogin: 'Akkaunt bormi? Kirish',
+  required: 'Maydonni to‘ldiring', emailInvalid: 'To‘g‘ri pochta kiriting', passwordShort: 'Kamida 8 ta belgi', passwordMismatch: 'Parollar mos emas', phoneInvalid: 'Raqamni kiriting, masalan +998 90 123 45 67',
+  serverTitle: 'Server manzili', serverHint: 'Faqat ishlab chiqish uchun: shu Wi-Fi tarmog‘idagi UzBite API kompyuteri manzili, masalan http://192.168.1.10:8081', serverCheck: 'Tekshirish', serverOk: 'Server ishlayapti', serverReset: 'Standart', serverLink: 'Server: {url}', serverInvalid: 'http://IP:8081 ko‘rinishidagi manzil',
+
+  onbTitle: 'Akkauntni sozlash', onbStep: '{n}-qadam, jami 4', onbPersonal: 'Shaxsiy ma’lumotlar', onbPersonalText: 'Ism va telefonni tekshiring — buyurtmasini olib ketayotganingizda restoran ularni ko‘radi.',
+  onbMode: 'Ish rejimi', onbSetup: 'Ulanish', onbDone: 'Tayyor', onbDoneText: 'Akkaunt sozlandi. Takliflarni olish uchun bosh ekranda mavjudlikni yoqing.', onbFinish: 'Ishni boshlash',
+  modeRESTAURANT: 'O‘z restoranim', modeRESTAURANTText: 'Sizni kod orqali taklif qilgan restoran buyurtmalarini yetkazasiz.', modeFREELANCE: 'Erkin yetkazishlar', modeFREELANCEText: 'Tumaningizdagi restoranlar buyurtmalarini olasiz. UzBite ruxsati kerak.',
+  inviteTitle: 'Restoran taklif kodi', inviteHint: '8 belgili kodni restoran beradi, masalan AB3K-7QXZ', inviteClaim: 'Kodni tekshirish', inviteFrom: '«{name}» restoranidan taklif', inviteAccept: 'Qabul qilish', inviteReject: 'Rad etish', inviteLinked: 'Siz «{name}» restorani bilan ishlaysiz',
+  areaTitle: 'Shahar va tuman', areaCity: 'Shahar', areaZone: 'Ish tumani', areaHint: 'Takliflar tanlangan tumandagi restoranlardan keladi. Joylashuvingiz kuzatilmaydi.',
+  approvalPENDING: 'UzBite ruxsatini kutmoqda', approvalAPPROVED: 'Erkin yetkazishlarga ruxsat berilgan', approvalSUSPENDED: 'Akkaunt bloklangan',
+  permSUSPENDED: 'Akkaunt bloklangan. Qo‘llab-quvvatlash xizmatiga murojaat qiling.', permNO_AFFILIATION_OR_APPROVAL: 'Buyurtma olish uchun restoranga kod orqali ulaning yoki UzBite ruxsatini kuting.',
+  permRestaurant: '«O‘z restoranim» rejimi uchun restoranga ulanish kerak.', permFreelance: 'Erkin yetkazishlar UzBite ruxsatidan keyin ochiladi.',
+
+  tabHome: 'Bosh sahifa', tabOffers: 'Buyurtmalar', tabHistory: 'Tarix', tabProfile: 'Profil',
+  statusAVAILABLE: 'Mavjud', statusUNAVAILABLE: 'Mavjud emas', statusBUSY: 'Band', statusOFFLINE: 'Aloqa yo‘q',
+  homeAvailability: 'Buyurtmalarni qabul qilaman', homeBusy: 'Yetkazish davomida yangi takliflar kelmaydi.', homeActive: 'Faol yetkazish', homeOffers: 'Yangi takliflar', homeNoOffers: 'Yangi takliflar yo‘q', homeToday: 'Bugun', homeDelivered: 'Yetkazishlar', homeAccrued: 'Hisoblangan', homeEarnings: 'Daromad',
+
+  offersTitle: 'Takliflar', offersEmpty: 'Hozircha takliflar yo‘q. Buyurtma olish uchun bosh sahifada mavjudlikni yoqing.', offersLeft: '{time} qoldi', offersExpired: 'Vaqt tugadi',
+  offersStraight: 'To‘g‘ri chiziq bo‘yicha {km} km', offersItems: 'Pozitsiyalar: {n}', offersCash: 'Olinadigan naqd pul: {sum}', offersCard: 'Karta orqali to‘langan', offersReward: 'Mukofot: {sum}', offersNoReward: 'Mukofot ko‘rsatilmagan',
+  offersAccept: 'Qabul qilish', offersReject: 'Rad etish', offersRejectTitle: 'Taklifni rad etasizmi?', offersReasonOptional: 'Sabab (ixtiyoriy)',
+  offersChecking: 'Aloqa uzildi. Buyurtma qabul qilinganini serverda tekshiryapmiz…', offersUnknown: 'Server bilan aloqa yo‘q. Server tasdiqlamaguncha buyurtma qabul qilingan hisoblanmaydi.', offersCheckAgain: 'Qayta tekshirish',
+  offersModeRESTAURANT_COURIER: 'Restoraningiz', offersModeUZBITE_COURIER: 'Erkin yetkazish', offersZone: 'Tuman: {zone}',
+
+  deliveryTitle: 'Buyurtma №{number}', dsASSIGNED: 'Sizga biriktirildi', dsREADY_FOR_PICKUP: 'Topshirishga tayyor', dsPICKED_UP: 'Buyurtma sizda', dsON_THE_WAY: 'Yo‘lda', dsDELIVERED: 'Yetkazildi', dsCANCELLED: 'Bekor qilindi', dsFAILED: 'Yetkazilmadi', dsSEARCHING: 'Kuryer qidirilmoqda', dsOFFERED: 'Taklif qilingan', dsNOT_REQUESTED: 'Biriktirilmagan',
+  pickupSection: 'Restorandan olish', dropoffSection: 'Xaridorga yetkazish', waitReady: 'Restoran hali buyurtmani tayyorlamoqda', isReady: 'Buyurtma topshirishga tayyor',
+  routeRestaurant: 'Restoranga yo‘nalish', routeCustomer: 'Xaridorga yo‘nalish', noCoordinates: 'Koordinatalar ko‘rsatilmagan — manzil bo‘yicha harakatlaning', call: 'Qo‘ng‘iroq qilish',
+  entrance: '{v}-kirish', floor: '{v}-qavat', apartment: '{v}-xonadon', comment: 'Izoh: {v}', items: 'Buyurtma tarkibi',
+  payCASH: 'Naqd to‘lov', payCARD: 'Karta orqali to‘lov', cashToCollect: 'Xaridordan olinadi: {sum}', cashDone: 'Naqd pul olindi',
+  actPickup: 'Buyurtma olindi', actStart: 'Yetkazishni boshlash', actCash: 'Naqd pul olindi', codeLabel: 'Xaridordan tasdiqlash kodi', actComplete: 'Buyurtma yetkazildi', attemptsLeft: 'Qolgan urinishlar: {n}',
+  actCodeProblem: 'Kod bilan muammo', actRelease: 'Yetkazishdan voz kechish', actRequestCancel: 'Bekor qilishni so‘rash', reasonLabel: 'Sabab', reasonHint: '3 dan 500 gacha belgi',
+  cfPickup: 'Buyurtmani restorandan olganingizni tasdiqlaysizmi?', cfStart: 'Yetkazishni boshlaysizmi? Xaridor buyurtma yo‘lda ekanini ko‘radi.', cfCash: '{sum} naqd pul olganingizni tasdiqlaysizmi?', cfComplete: '{code} kodi bilan yetkazishni yakunlaysizmi?',
+  cfRelease: 'Yetkazishdan voz kechasizmi? Buyurtma restoranga qaytadi.', cfRequestCancel: 'Buyurtma allaqachon sizda. Faqat restoran qarori bilan bekor qilish mumkin — so‘rov yuborilsinmi?', cfCodeProblem: 'Xaridor kodni ayta olmasligini restoranga xabar qilasizmi? Topshirishni restoran tasdiqlaydi.',
+  issueOpen: 'Murojaat restoranga yuborildi. Qarorni kutyapmiz.', issueCANCELLATION_REQUEST: 'Bekor qilish so‘rovi', issueHANDOFF_CODE_UNAVAILABLE: 'Kod bilan muammo',
+  deliveryDone: 'Yetkazish yakunlandi', deliveryReleased: 'Bu yetkazish endi sizga biriktirilmagan', noActive: 'Faol yetkazish yo‘q',
+  rewardLine: 'Mukofot: {sum} · {status}', rewardNONE: 'yo‘q', rewardACCRUED: 'hisoblandi', rewardCONFIRMED: 'tasdiqlandi', rewardPAID: 'to‘landi',
+
+  historyTitle: 'Tarix', fAll: 'Hammasi', fCompleted: 'Yakunlangan', fCancelled: 'Bekor qilingan', fRestaurant: 'O‘z restoranim', fFreelance: 'UzBite',
+  outDELIVERED: 'Yetkazildi', outCANCELLED: 'Bekor qilindi', outFAILED: 'Yetkazilmadi', outIN_PROGRESS: 'Jarayonda', historyEmpty: 'Bu yerda yetkazishlaringiz paydo bo‘ladi',
+
+  earningsTitle: 'Daromad', eAccrued: 'Hisoblangan', eConfirmed: 'Restoran tasdiqlagan', ePaid: 'To‘langan', ePending: 'To‘lov kutilmoqda', eCompleted: 'Yakunlangan yetkazishlar', eWithout: 'Mukofotsiz', eToday: 'Bugun: {n} ta, {sum}',
+  eNote: 'Summalar restoranlar ma’lumotlari bo‘yicha. «To‘langan» — restoran to‘lovni belgilaganini bildiradi. UzBite pul o‘tkazmaydi.',
+
+  profileTitle: 'Profil', personal: 'Shaxsiy ma’lumotlar', edit: 'O‘zgartirish', workMode: 'Ish rejimi', restaurants: 'Restoranlar', workArea: 'Ish hududi', notifications: 'Bildirishnomalar', language: 'Til', theme: 'Mavzu', themeLight: 'Yorug‘', themeDark: 'Qorong‘i', support: 'Qo‘llab-quvvatlash', logout: 'Chiqish', version: 'Versiya {v}', server: 'Server',
+  logoutConfirm: 'Akkauntdan chiqasizmi?', logoutActive: 'Sizda faol yetkazish bor. Chiqqaningizdan keyin yangilanishlar kelmaydi, lekin yetkazish sizda qoladi.', modeConfirm: 'Ish rejimini o‘zgartirasizmi? Ochiq takliflar qaytarib olinadi.',
+  affEnd: 'Ishni to‘xtatish', affEndConfirm: '«{name}» restorani bilan ishni to‘xtatasizmi?', affACTIVE: 'Faol', affENDED: 'Yakunlangan', affEmpty: 'Siz hali restoranlarga ulanmagansiz', affAdd: 'Taklif kodini kiritish',
+  pushNote: 'Bu versiyada fon push-bildirishnomalari yo‘q: hodisalar ilova ochiq va aloqa bor paytda keladi hamda «Bildirishnomalar» bo‘limida saqlanadi.',
+
+  notifTitle: 'Bildirishnomalar', notifEmpty: 'Hozircha bildirishnomalar yo‘q', notifReadAll: 'Barchasini o‘qish',
+  nOFFER_CREATED: 'Yangi yetkazish taklifi', nREADY_FOR_PICKUP: 'Buyurtma topshirishga tayyor', nRELEASED_BY_RESTAURANT: 'Restoran tayinlovni bekor qildi', nISSUE_RESOLVED: 'Murojaat ko‘rib chiqildi', nCASH_SETTLED: 'Naqd hisob-kitob tasdiqlandi', nREWARD_CONFIRMED: 'Mukofot tasdiqlandi', nREWARD_PAID: 'Mukofot to‘lovi belgilandi', nOrder: 'Buyurtma №{number}',
+
+  errINVALID_CREDENTIALS: 'Pochta yoki parol noto‘g‘ri', errEMAIL_TAKEN: 'Bu pochta allaqachon ro‘yxatdan o‘tgan', errOFFER_TAKEN: 'Bu buyurtmani boshqa kuryer allaqachon qabul qilgan', errOFFER_EXPIRED: 'Taklif muddati tugadi', errOFFER_WITHDRAWN: 'Taklif endi amal qilmaydi', errOFFER_REJECTED: 'Siz bu taklifni allaqachon rad etgansiz',
+  errCOURIER_BUSY: 'Sizda allaqachon faol yetkazish bor', errNOT_READY: 'Restoran hali buyurtmani tayyor deb belgilamagan', errHANDOFF_CODE_INVALID: 'Kod noto‘g‘ri', errHANDOFF_LOCKED: 'Kod kiritish urinishlari tugadi. Kod bilan muammo haqida xabar bering', errCASH_NOT_CONFIRMED: 'Avval naqd pul olinganini tasdiqlang',
+  errMODE_NOT_ALLOWED: 'Bu rejim hozircha akkauntingiz uchun mavjud emas', errCOURIER_SUSPENDED: 'Kuryer akkaunti bloklangan', errSERVICE_AREA_REQUIRED: 'Shahar va ish tumanini ko‘rsating', errONBOARDING_INCOMPLETE: 'Avval akkaunt sozlashni yakunlang', errWORK_MODE_REQUIRED: 'Ish rejimini tanlang', errAFFILIATION_REQUIRED: 'Restoran taklif kodini kiriting va qabul qiling',
+  errINVITATION_INVALID: 'Kod yaroqsiz, muddati o‘tgan yoki ishlatilgan', errINVITATION_CODE_FORMAT: 'Kod 8 ta belgidan iborat', errALREADY_AFFILIATED: 'Siz bu restoran bilan allaqachon ishlaysiz', errACTIVE_DELIVERY: 'Avval shu restoranning joriy yetkazishini yakunlang', errRATE_LIMIT: 'Urinishlar juda ko‘p. Biroz kuting',
+  errVALIDATION: 'To‘ldirilgan maydonlarni tekshiring', errNETWORK: 'Server bilan aloqa yo‘q', errTIMEOUT: 'Server o‘z vaqtida javob bermadi', errSERVER: 'Serverda xatolik. Keyinroq urinib ko‘ring', errREASON_REQUIRED: 'Sababni ko‘rsating (3 dan 500 gacha belgi)', errNOT_ASSIGNED: 'Bu yetkazish endi sizga biriktirilmagan', errPAYMENT_REQUIRED: 'Karta orqali to‘lovni restoran hali tasdiqlamagan',
+};
+
+export const en: Record<TextKey, string> = {
+  appName: 'UzBite Courier', loading: 'Loading…', retry: 'Retry', cancel: 'Cancel', confirm: 'Confirm', save: 'Save', back: 'Back', next: 'Next', close: 'Close', open: 'Open', more: 'Show more', yes: 'Yes', no: 'No',
+  offline: 'No internet connection', serverDown: 'The server is unreachable. Check the network and the server address', realtimeDown: 'Live updates are temporarily unavailable. Data will refresh when the connection returns', sessionExpired: 'Your session expired. Please sign in again', genericError: 'The action failed. Please try again', startupError: 'Could not reach the server',
+
+  email: 'Email', password: 'Password', passwordConfirmation: 'Repeat the password', firstName: 'First name', lastName: 'Last name', phone: 'Phone',
+  loginTitle: 'Courier sign in', loginSubtitle: 'Deliver orders of UzBite restaurants', loginSubmit: 'Sign in', toRegister: 'No account yet? Sign up',
+  registerTitle: 'Courier sign up', registerSubmit: 'Create account', toLogin: 'Already have an account? Sign in',
+  required: 'Fill in this field', emailInvalid: 'Enter a valid email', passwordShort: 'At least 8 characters', passwordMismatch: 'Passwords do not match', phoneInvalid: 'Enter a number such as +998 90 123 45 67',
+  serverTitle: 'Server address', serverHint: 'Development only: the computer running the UzBite API on the same Wi-Fi, e.g. http://192.168.1.10:8081', serverCheck: 'Check', serverOk: 'Server is reachable', serverReset: 'Default', serverLink: 'Server: {url}', serverInvalid: 'An address like http://IP:8081',
+
+  onbTitle: 'Account setup', onbStep: 'Step {n} of 4', onbPersonal: 'Personal details', onbPersonalText: 'Check your name and phone — the restaurant sees them while you carry its order.',
+  onbMode: 'Work mode', onbSetup: 'Connection', onbDone: 'Done', onbDoneText: 'Your account is ready. Turn on availability on the home screen to receive offers.', onbFinish: 'Start working',
+  modeRESTAURANT: 'Own restaurant', modeRESTAURANTText: 'Deliver orders of the restaurant that invited you with a code.', modeFREELANCE: 'Free deliveries', modeFREELANCEText: 'Receive orders from restaurants in your district. Requires UzBite approval.',
+  inviteTitle: 'Restaurant invitation code', inviteHint: 'The restaurant gives you an 8-character code, e.g. AB3K-7QXZ', inviteClaim: 'Check code', inviteFrom: 'Invitation from “{name}”', inviteAccept: 'Accept', inviteReject: 'Decline', inviteLinked: 'You work with “{name}”',
+  areaTitle: 'City and district', areaCity: 'City', areaZone: 'Work district', areaHint: 'Offers come from restaurants in the selected district. Your location is not tracked.',
+  approvalPENDING: 'Waiting for UzBite approval', approvalAPPROVED: 'Approved for free deliveries', approvalSUSPENDED: 'Account suspended',
+  permSUSPENDED: 'Your account is suspended. Contact support.', permNO_AFFILIATION_OR_APPROVAL: 'To receive orders, link to a restaurant with a code or wait for UzBite approval.',
+  permRestaurant: 'The own-restaurant mode needs a restaurant link.', permFreelance: 'Free deliveries open after UzBite approval.',
+
+  tabHome: 'Home', tabOffers: 'Orders', tabHistory: 'History', tabProfile: 'Profile',
+  statusAVAILABLE: 'Available', statusUNAVAILABLE: 'Unavailable', statusBUSY: 'Busy', statusOFFLINE: 'No connection',
+  homeAvailability: 'Accepting orders', homeBusy: 'No new offers arrive while you are delivering.', homeActive: 'Active delivery', homeOffers: 'New offers', homeNoOffers: 'No new offers', homeToday: 'Today', homeDelivered: 'Deliveries', homeAccrued: 'Accrued', homeEarnings: 'Earnings',
+
+  offersTitle: 'Offers', offersEmpty: 'No offers yet. Turn on availability on the home screen to receive orders.', offersLeft: '{time} left', offersExpired: 'Time is up',
+  offersStraight: '{km} km in a straight line', offersItems: 'Items: {n}', offersCash: 'Cash to collect: {sum}', offersCard: 'Paid by card', offersReward: 'Reward: {sum}', offersNoReward: 'No reward specified',
+  offersAccept: 'Accept', offersReject: 'Decline', offersRejectTitle: 'Decline this offer?', offersReasonOptional: 'Reason (optional)',
+  offersChecking: 'The connection dropped. Checking on the server whether the order is yours…', offersUnknown: 'No connection to the server. The order is not yours until the server confirms it.', offersCheckAgain: 'Check again',
+  offersModeRESTAURANT_COURIER: 'Your restaurant', offersModeUZBITE_COURIER: 'Free delivery', offersZone: 'District: {zone}',
+
+  deliveryTitle: 'Order #{number}', dsASSIGNED: 'Assigned to you', dsREADY_FOR_PICKUP: 'Ready for pickup', dsPICKED_UP: 'Order with you', dsON_THE_WAY: 'On the way', dsDELIVERED: 'Delivered', dsCANCELLED: 'Cancelled', dsFAILED: 'Not delivered', dsSEARCHING: 'Searching', dsOFFERED: 'Offered', dsNOT_REQUESTED: 'Not assigned',
+  pickupSection: 'Pick up at the restaurant', dropoffSection: 'Deliver to the customer', waitReady: 'The restaurant is still preparing the order', isReady: 'The order is ready for pickup',
+  routeRestaurant: 'Route to restaurant', routeCustomer: 'Route to customer', noCoordinates: 'No coordinates — use the address', call: 'Call',
+  entrance: 'Entrance {v}', floor: 'Floor {v}', apartment: 'Apt. {v}', comment: 'Note: {v}', items: 'Order items',
+  payCASH: 'Cash payment', payCARD: 'Card payment', cashToCollect: 'Collect from the customer: {sum}', cashDone: 'Cash received',
+  actPickup: 'Order picked up', actStart: 'Start delivery', actCash: 'Cash received', codeLabel: 'Confirmation code from the customer', actComplete: 'Order delivered', attemptsLeft: 'Attempts left: {n}',
+  actCodeProblem: 'Problem with the code', actRelease: 'Drop this delivery', actRequestCancel: 'Request cancellation', reasonLabel: 'Reason', reasonHint: '3 to 500 characters',
+  cfPickup: 'Confirm that you picked up the order at the restaurant?', cfStart: 'Start the delivery? The customer will see the order is on the way.', cfCash: 'Confirm you received {sum} in cash?', cfComplete: 'Complete the delivery with code {code}?',
+  cfRelease: 'Drop this delivery? The order goes back to the restaurant.', cfRequestCancel: 'You already have the food. Only the restaurant can cancel now — send a request?', cfCodeProblem: 'Tell the restaurant the customer cannot give the code? The restaurant will confirm the handoff.',
+  issueOpen: 'Request sent to the restaurant. Waiting for its decision.', issueCANCELLATION_REQUEST: 'Cancellation request', issueHANDOFF_CODE_UNAVAILABLE: 'Problem with the code',
+  deliveryDone: 'Delivery completed', deliveryReleased: 'This delivery is no longer assigned to you', noActive: 'No active delivery',
+  rewardLine: 'Reward: {sum} · {status}', rewardNONE: 'none', rewardACCRUED: 'accrued', rewardCONFIRMED: 'confirmed', rewardPAID: 'paid',
+
+  historyTitle: 'History', fAll: 'All', fCompleted: 'Completed', fCancelled: 'Cancelled', fRestaurant: 'Own restaurant', fFreelance: 'UzBite',
+  outDELIVERED: 'Delivered', outCANCELLED: 'Cancelled', outFAILED: 'Not delivered', outIN_PROGRESS: 'In progress', historyEmpty: 'Your deliveries will appear here',
+
+  earningsTitle: 'Earnings', eAccrued: 'Accrued', eConfirmed: 'Confirmed by restaurants', ePaid: 'Paid', ePending: 'Awaiting payment', eCompleted: 'Deliveries completed', eWithout: 'Without reward', eToday: 'Today: {n} deliveries, {sum}',
+  eNote: 'Amounts are as reported by restaurants. “Paid” means the restaurant marked the payment. UzBite does not transfer money.',
+
+  profileTitle: 'Profile', personal: 'Personal details', edit: 'Edit', workMode: 'Work mode', restaurants: 'Restaurants', workArea: 'Work area', notifications: 'Notifications', language: 'Language', theme: 'Theme', themeLight: 'Light', themeDark: 'Dark', support: 'Support', logout: 'Sign out', version: 'Version {v}', server: 'Server',
+  logoutConfirm: 'Sign out?', logoutActive: 'You have an active delivery. After signing out you will not get updates, but the delivery stays yours.', modeConfirm: 'Change the work mode? Open offers will be withdrawn.',
+  affEnd: 'Stop working', affEndConfirm: 'Stop working with “{name}”?', affACTIVE: 'Active', affENDED: 'Ended', affEmpty: 'You are not linked to any restaurant yet', affAdd: 'Enter an invitation code',
+  pushNote: 'Background push notifications are not supported in this version: events arrive while the app is open and online, and stay in Notifications.',
+
+  notifTitle: 'Notifications', notifEmpty: 'No notifications yet', notifReadAll: 'Mark all read',
+  nOFFER_CREATED: 'New delivery offer', nREADY_FOR_PICKUP: 'Order ready for pickup', nRELEASED_BY_RESTAURANT: 'The restaurant cancelled your assignment', nISSUE_RESOLVED: 'Your request was reviewed', nCASH_SETTLED: 'Cash settlement confirmed', nREWARD_CONFIRMED: 'Reward confirmed', nREWARD_PAID: 'Reward payment recorded', nOrder: 'Order #{number}',
+
+  errINVALID_CREDENTIALS: 'Wrong email or password', errEMAIL_TAKEN: 'This email is already registered', errOFFER_TAKEN: 'Another courier has already accepted this order', errOFFER_EXPIRED: 'The offer has expired', errOFFER_WITHDRAWN: 'The offer is no longer valid', errOFFER_REJECTED: 'You already declined this offer',
+  errCOURIER_BUSY: 'You already have an active delivery', errNOT_READY: 'The restaurant has not marked the order ready yet', errHANDOFF_CODE_INVALID: 'Wrong code', errHANDOFF_LOCKED: 'No code attempts left. Report a problem with the code', errCASH_NOT_CONFIRMED: 'Confirm the cash payment first',
+  errMODE_NOT_ALLOWED: 'This mode is not available for your account yet', errCOURIER_SUSPENDED: 'The courier account is suspended', errSERVICE_AREA_REQUIRED: 'Choose your city and district', errONBOARDING_INCOMPLETE: 'Finish the account setup first', errWORK_MODE_REQUIRED: 'Choose a work mode', errAFFILIATION_REQUIRED: 'Enter and accept a restaurant invitation code',
+  errINVITATION_INVALID: 'The code is invalid, expired or already used', errINVITATION_CODE_FORMAT: 'The code has 8 characters', errALREADY_AFFILIATED: 'You already work with this restaurant', errACTIVE_DELIVERY: 'Finish this restaurant’s current delivery first', errRATE_LIMIT: 'Too many attempts. Please wait a little',
+  errVALIDATION: 'Check the fields', errNETWORK: 'No connection to the server', errTIMEOUT: 'The server did not answer in time', errSERVER: 'Server error. Please try later', errREASON_REQUIRED: 'Give a reason (3 to 500 characters)', errNOT_ASSIGNED: 'This delivery is no longer assigned to you', errPAYMENT_REQUIRED: 'The restaurant has not confirmed the card payment yet',
+};
