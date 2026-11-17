@@ -13,7 +13,7 @@ const notificationQuerySchema = paginationSchema.extend({ orderId: z.string().tr
 async function notificationWhere(userId: string, orderId?: string): Promise<Prisma.NotificationWhereInput> {
   if (!orderId) return { userId };
   assert(await db.order.findFirst({ where: { id: orderId, userId }, select: { id: true } }), 404, 'NOT_FOUND', 'Заказ не найден');
-  return { userId, type: { in: ['ORDER_CREATED', 'ORDER_STATUS', 'PAYMENT_STATUS'] }, metadata: { path: ['orderId'], equals: orderId } };
+  return { userId, type: { in: ['ORDER_CREATED', 'ORDER_STATUS', 'PAYMENT_STATUS', 'DELIVERY_STATUS'] }, metadata: { path: ['orderId'], equals: orderId } };
 }
 notificationRouter.get('/', async (req, res) => {
   const { page, pageSize, orderId } = notificationQuerySchema.parse(req.query);

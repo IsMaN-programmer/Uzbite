@@ -16,6 +16,15 @@ test('Existing notification rows without metadata remain localized', () => {
   assert.equal(notificationDto(notice({ type: 'COMMENT_REPLY', body: 'Aziza ответил на ваш комментарий', metadata: null }), 'en').body, 'Aziza replied to your comment');
   assert.equal(notificationDto(notice({ type: 'ORDER_STATUS', body: 'UNKNOWN_INTERNAL_VALUE', metadata: null }), 'uz').body, 'Buyurtma holati yangilandi');
 });
+test('Dispatch notifications render from the stored event in the reader language', () => {
+  const assigned = notice({ type: 'DELIVERY_STATUS', metadata: { event: 'COURIER_ASSIGNED', restaurantName: 'Osh', orderId: 'o1' } });
+  assert.equal(notificationDto(assigned, 'en').title, 'Courier assigned');
+  assert.equal(notificationDto(assigned, 'en').body, 'Osh · Tell the courier your confirmation code');
+  const offer = notice({ type: 'COURIER_DELIVERY', metadata: { event: 'OFFER_CREATED', restaurantName: 'Osh', orderNumber: 'AB12CD34' } });
+  assert.equal(notificationDto(offer, 'uz').title, 'Yangi yetkazish taklifi');
+  assert.equal(notificationDto(offer, 'ru').body, 'Osh · Заказ №AB12CD34');
+  assert.equal(notificationDto(notice({ type: 'RESTAURANT_DELIVERY', metadata: { event: 'UNKNOWN' } }), 'en').title, 'UzBite notification');
+});
 test('Payment rejection and comment notifications localize semantic metadata', () => {
   const payment = notificationDto(notice({ type: 'PAYMENT_STATUS', metadata: { restaurantName: 'Osh', paymentStatus: 'REJECTED' } }), 'en');
   assert.equal(payment.body, 'Osh · Payment rejected');

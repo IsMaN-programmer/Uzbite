@@ -19,6 +19,7 @@
     "lint": "eslint apps packages prisma scripts tests --no-warn-ignored",
     "test": "tsx --test apps/backend/src/**/*.test.ts tests/unit/*.test.ts",
     "test:integration": "tsx --test tests/integration.test.ts",
+    "test:dispatch": "tsx --test tests/dispatch.integration.test.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",

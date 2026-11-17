@@ -8,11 +8,12 @@ import { ioEvent } from './realtime.js';
  * Socket payloads are hints: every client re-reads REST, which reflects PostgreSQL.
  */
 export class Outbox {
-  private events: { room: string; event: string; payload: unknown }[] = [];
+  private events: { room: string | string[]; event: string; payload: unknown }[] = [];
   private customerOrders = new Set<string>();
   private customerNotifications: string[] = [];
   private accountNotifications: string[] = [];
-  emit(room: string, event: string, payload: unknown) { this.events.push({ room, event, payload }); return this; }
+  /** Several rooms in one emit reach a socket that joined more than one of them only once. */
+  emit(room: string | string[], event: string, payload: unknown) { this.events.push({ room, event, payload }); return this; }
   courier(courierId: string, event: string, payload: unknown) { return this.emit(`courier:${courierId}`, event, payload); }
   restaurant(restaurantId: string, event: string, payload: unknown) { return this.emit(`restaurant:${restaurantId}`, event, payload); }
   customerOrder(orderId: string) { this.customerOrders.add(orderId); return this; }
