@@ -13,6 +13,8 @@ import { addressRouter } from './routes/addresses.js';
 import { orderRouter } from './routes/orders.js';
 import { notificationRouter } from './routes/notifications.js';
 import { uploadRouter } from './routes/uploads.js';
+import { courierRouter } from './routes/courier.js';
+import { restaurantRouter } from './routes/restaurant.js';
 import { errorHandler, notFound } from './utils/errors.js';
 
 export function createApp() {
@@ -31,6 +33,9 @@ export function createApp() {
   });
   app.use('/api', rateLimit('api', 1200, 60), csrfProtection, optionalAuth);
   app.use('/api/auth', authRouter);
+  // Native apps (Bearer tokens): courier mobile app and the future restaurant Windows app.
+  app.use('/api/courier', courierRouter);
+  app.use('/api/restaurant', restaurantRouter);
   app.use('/api', catalogRouter);
   app.use('/api/profile', profileRouter);
   app.use('/api/addresses', addressRouter);

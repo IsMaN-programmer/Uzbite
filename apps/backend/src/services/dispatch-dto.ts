@@ -86,3 +86,27 @@ export function restaurantDeliveryDto(delivery: RestaurantDeliveryRow) {
     offers: offers.map(({ courier: offered, ...offer }) => ({ ...offer, courierName: `${offered.firstName} ${offered.lastName}`.trim() })),
   });
 }
+
+const restaurantOrderBase = {
+  items: { select: { dishId: true, dishName: true, unitPrice: true, quantity: true, imageUrl: true } },
+  payment: { select: { method: true, status: true, rejectionReason: true, receiptId: true } },
+} as const satisfies Prisma.OrderInclude;
+export const restaurantOrderInclude = { ...restaurantOrderBase, delivery: { include: restaurantDeliveryInclude } } as const satisfies Prisma.OrderInclude;
+export const restaurantOrderListInclude = {
+  ...restaurantOrderBase,
+  delivery: { select: { id: true, status: true, mode: true, version: true, readyAt: true, cashStatus: true, rewardStatus: true, courier: { select: { firstName: true, lastName: true } } } },
+} as const satisfies Prisma.OrderInclude;
+type RestaurantOrderRow = Prisma.OrderGetPayload<{ include: typeof restaurantOrderInclude }>;
+type RestaurantOrderListRow = Prisma.OrderGetPayload<{ include: typeof restaurantOrderListInclude }>;
+function restaurantOrderBody(order: RestaurantOrderRow | RestaurantOrderListRow) {
+  // The customer account id is internal; the restaurant needs only the recipient and drop-off.
+  const { userId: _customer, delivery: _delivery, payment, ...rest } = order;
+  return { ...rest, number: orderNumber(order.id), payment: payment ? { method: payment.method, status: payment.status, rejectionReason: payment.rejectionReason, hasReceipt: Boolean(payment.receiptId) } : null };
+}
+export function restaurantOrderDto(order: RestaurantOrderRow) {
+  return jsonValue({ ...restaurantOrderBody(order), delivery: order.delivery ? restaurantDeliveryDto(order.delivery) : null });
+}
+export function restaurantOrderSummaryDto(order: RestaurantOrderListRow) {
+  const delivery = order.delivery;
+  return jsonValue({ ...restaurantOrderBody(order), delivery: delivery ? { ...delivery, courier: undefined, courierName: delivery.courier ? `${delivery.courier.firstName} ${delivery.courier.lastName}`.trim() : null } : null });
+}

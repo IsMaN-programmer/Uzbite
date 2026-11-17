@@ -1,12 +1,12 @@
 import { randomInt, timingSafeEqual } from 'node:crypto';
-import { Prisma, type CourierProfile, type CourierWorkMode, type Delivery, type DeliveryMode, type DeliveryOffer, type DeliveryStatus, type OrderStatus } from '@prisma/client';
+import { Prisma, type CourierApprovalStatus, type CourierProfile, type CourierWorkMode, type Delivery, type DeliveryMode, type DeliveryOffer, type DeliveryStatus, type OrderStatus } from '@prisma/client';
 import { db } from '../config/database.js';
 import { env } from '../config/env.js';
 import { ApiError, assert } from '../utils/errors.js';
 import { applyOrderState } from './order-status.js';
 import { Outbox } from './outbox.js';
 import { dispatchNoticeText } from './notifications.js';
-import { ACTIVE_DELIVERY, AFTER_PICKUP, BEFORE_PICKUP, courierDeliveryDto, courierDeliveryInclude, courierOfferDto, offerInclude, orderNumber, restaurantDeliveryDto, restaurantDeliveryInclude } from './dispatch-dto.js';
+import { ACTIVE_DELIVERY, AFTER_PICKUP, BEFORE_PICKUP, courierDeliveryDto, courierDeliveryInclude, courierOfferDto, offerInclude, orderNumber, restaurantDeliveryDto, restaurantDeliveryInclude, restaurantOrderDto, restaurantOrderInclude } from './dispatch-dto.js';
 
 /**
  * Delivery dispatch core shared by the courier app API and the restaurant API.
@@ -214,13 +214,13 @@ async function closeOffers(tx: Tx, out: Outbox, offers: OpenOffer[], status: 'WI
   }
 }
 /** Pending offers of a courier, read before locking so their orders/deliveries can be locked first. */
-async function pendingOffersOf(client: Tx, courierId: string) {
-  return client.deliveryOffer.findMany({ where: { courierId, status: 'PENDING' }, select: { id: true, deliveryId: true, delivery: { select: { orderId: true } } } });
+async function pendingOffersOf(client: Tx, courierId: string, where: Prisma.DeliveryOfferWhereInput = {}) {
+  return client.deliveryOffer.findMany({ where: { ...where, courierId, status: 'PENDING' }, select: { id: true, deliveryId: true, delivery: { select: { orderId: true } } } });
 }
 /** Under the lock, new pending offers for deliveries we did not lock force a clean retry. */
-async function pendingOffersUnchanged(tx: Tx, courierId: string, before: { id: string }[]) {
+async function pendingOffersUnchanged(tx: Tx, courierId: string, before: { id: string }[], where: Prisma.DeliveryOfferWhereInput = {}) {
   const known = new Set(before.map(offer => offer.id));
-  const now = await tx.deliveryOffer.findMany({ where: { courierId, status: 'PENDING' }, select: { id: true } });
+  const now = await tx.deliveryOffer.findMany({ where: { ...where, courierId, status: 'PENDING' }, select: { id: true } });
   if (now.some(offer => !known.has(offer.id))) throw new RetryTransaction();
 }
 /** Releases the assigned courier before pickup; the delivery returns to the restaurant (readiness is kept). */
@@ -780,70 +780,183 @@ export async function advanceReward(restaurantId: string, deliveryId: string, to
 }
 
 // ---------------------------------------------------------------------------------------------
-// Courier availability and work mode
+// Courier state: availability, work mode, area, affiliations, approval
 // ---------------------------------------------------------------------------------------------
 
-/** Withdraws the courier's open offers (locking their deliveries first) and applies a profile change. */
-async function withdrawCourierWork(courierId: string, reason: string, change: (courier: CourierState) => Prisma.CourierProfileUpdateInput) {
-  const actor: DispatchActor = { id: courierId, role: 'COURIER' };
-  const pending = await pendingOffersOf(db, courierId);
-  return dispatchTx(async (tx, out) => {
-    await lockRows(tx, { orders: pending.map(item => item.delivery.orderId), deliveries: pending.map(item => item.deliveryId), couriers: [courierId] });
-    await pendingOffersUnchanged(tx, courierId, pending);
-    const courier = await readCourier(tx, courierId);
-    assert(courier, 404, 'NOT_FOUND', 'Профиль курьера не найден');
-    const data = change(courier);
-    const offers = await tx.deliveryOffer.findMany({ where: { courierId, status: 'PENDING' } });
-    await closeOffers(tx, out, offers, 'WITHDRAWN', reason, actor);
-    const profile = await tx.courierProfile.update({ where: { userId: courierId }, data });
-    out.courier(courierId, 'courier:profile_updated', { isAvailable: profile.isAvailable, workMode: profile.workMode });
-    return profile;
-  });
+/** Why the courier cannot go online in the current mode, or null. The mode itself is only a preference. */
+function readinessError(courier: Pick<CourierState, 'approvalStatus' | 'onboardingCompletedAt' | 'workMode' | 'serviceZone' | 'affiliatedRestaurantIds'>): ApiError | null {
+  if (courier.approvalStatus === 'SUSPENDED') return new ApiError(403, 'COURIER_SUSPENDED', 'Аккаунт курьера заблокирован');
+  if (!courier.onboardingCompletedAt) return new ApiError(409, 'ONBOARDING_INCOMPLETE', 'Сначала завершите регистрацию');
+  if (!courier.workMode) return new ApiError(409, 'WORK_MODE_REQUIRED', 'Выберите режим работы');
+  const permissions = courierPermissions(courier, courier.affiliatedRestaurantIds.length);
+  if (courier.workMode === 'RESTAURANT') return permissions.restaurantMode ? null : new ApiError(403, 'MODE_NOT_ALLOWED', 'Режим «Свой ресторан» доступен после привязки к ресторану по коду приглашения');
+  if (!permissions.freelanceMode) return new ApiError(403, 'MODE_NOT_ALLOWED', 'Свободные доставки доступны после допуска UzBite');
+  return courier.serviceZone ? null : new ApiError(409, 'SERVICE_AREA_REQUIRED', 'Укажите город и район работы');
 }
 
-export async function setCourierAvailability(courierId: string, available: boolean) {
-  if (!available) return withdrawCourierWork(courierId, 'COURIER_UNAVAILABLE', () => ({ isAvailable: false }));
-  const profile = await dispatchTx(async (tx, out) => {
-    await lockRows(tx, { couriers: [courierId] });
+type Withdrawal = { reason: string; where?: Prisma.DeliveryOfferWhereInput };
+/**
+ * Applies a change to a courier under the canonical locks. Open offers matching `withdraw` (their
+ * orders and deliveries are locked first) are withdrawn in the same transaction.
+ */
+export async function changeCourierState<T>(courierId: string, actor: DispatchActor, withdraw: Withdrawal | null, apply: (tx: Tx, out: Outbox, courier: CourierState) => Promise<T>): Promise<T> {
+  const where = withdraw?.where ?? {};
+  const pending = withdraw ? await pendingOffersOf(db, courierId, where) : [];
+  return dispatchTx(async (tx, out) => {
+    await lockRows(tx, { orders: pending.map(item => item.delivery.orderId), deliveries: pending.map(item => item.deliveryId), couriers: [courierId] });
+    if (withdraw) await pendingOffersUnchanged(tx, courierId, pending, where);
     const courier = await readCourier(tx, courierId);
     assert(courier, 404, 'NOT_FOUND', 'Профиль курьера не найден');
-    assert(courier.approvalStatus !== 'SUSPENDED', 403, 'COURIER_SUSPENDED', 'Аккаунт курьера заблокирован');
-    assert(courier.onboardingCompletedAt, 409, 'ONBOARDING_INCOMPLETE', 'Сначала завершите регистрацию');
-    assert(courier.workMode, 409, 'WORK_MODE_REQUIRED', 'Выберите режим работы');
-    const permissions = courierPermissions(courier, courier.affiliatedRestaurantIds.length);
-    if (courier.workMode === 'RESTAURANT') assert(permissions.restaurantMode, 403, 'MODE_NOT_ALLOWED', 'Режим «Свой ресторан» доступен после привязки к ресторану');
-    else {
-      assert(permissions.freelanceMode, 403, 'MODE_NOT_ALLOWED', 'Свободные доставки доступны после допуска UzBite');
-      assert(courier.serviceZone, 409, 'SERVICE_AREA_REQUIRED', 'Укажите город и район работы');
-    }
-    const updated = await tx.courierProfile.update({ where: { userId: courierId }, data: { isAvailable: true } });
-    out.courier(courierId, 'courier:profile_updated', { isAvailable: true, workMode: updated.workMode });
-    return updated;
+    const result = await apply(tx, out, courier);
+    if (withdraw) await closeOffers(tx, out, await tx.deliveryOffer.findMany({ where: { ...where, courierId, status: 'PENDING' } }), 'WITHDRAWN', withdraw.reason, actor);
+    return result;
+  });
+}
+async function updateCourierProfile(tx: Tx, out: Outbox, courierId: string, data: Prisma.CourierProfileUpdateInput) {
+  const profile = await tx.courierProfile.update({ where: { userId: courierId }, data });
+  out.courier(courierId, 'courier:profile_updated', { isAvailable: profile.isAvailable, workMode: profile.workMode, approvalStatus: profile.approvalStatus });
+  return profile;
+}
+const asCourier = (courierId: string): DispatchActor => ({ id: courierId, role: 'COURIER' });
+
+/** Going offline withdraws open offers; going online re-checks every permission on the server. */
+export async function setCourierAvailability(courierId: string, available: boolean) {
+  if (!available) return changeCourierState(courierId, asCourier(courierId), { reason: 'COURIER_UNAVAILABLE' }, (tx, out) => updateCourierProfile(tx, out, courierId, { isAvailable: false }));
+  const profile = await changeCourierState(courierId, asCourier(courierId), null, async (tx, out, courier) => {
+    const problem = readinessError(courier);
+    if (problem) throw problem;
+    return updateCourierProfile(tx, out, courierId, { isAvailable: true });
   });
   await matchCourierToOpenSearches(courierId).catch(() => 0);
   return profile;
 }
 
-/** Changing mode withdraws open offers. Availability is kept only if the new mode is fully allowed. */
+/**
+ * The work mode is chosen during onboarding, before any access exists; going online checks the
+ * permission. Changing it withdraws open offers and keeps availability only if the new mode is ready.
+ */
 export async function setCourierWorkMode(courierId: string, mode: CourierWorkMode) {
   const current = await db.courierProfile.findUnique({ where: { userId: courierId } });
   assert(current, 404, 'NOT_FOUND', 'Профиль курьера не найден');
   if (current.workMode === mode) return current;
-  const profile = await withdrawCourierWork(courierId, 'WORK_MODE_CHANGED', courier => {
+  const profile = await changeCourierState(courierId, asCourier(courierId), { reason: 'WORK_MODE_CHANGED' }, (tx, out, courier) => {
     assert(courier.approvalStatus !== 'SUSPENDED', 403, 'COURIER_SUSPENDED', 'Аккаунт курьера заблокирован');
-    const permissions = courierPermissions(courier, courier.affiliatedRestaurantIds.length);
-    if (mode === 'RESTAURANT') assert(permissions.restaurantMode, 403, 'MODE_NOT_ALLOWED', 'Режим «Свой ресторан» доступен после привязки к ресторану по коду приглашения');
-    else assert(permissions.freelanceMode, 403, 'MODE_NOT_ALLOWED', 'Свободные доставки доступны после допуска UzBite');
-    const keepAvailable = courier.isAvailable && Boolean(courier.onboardingCompletedAt) && (mode === 'RESTAURANT' || Boolean(courier.serviceZone));
-    return { workMode: mode, isAvailable: keepAvailable };
+    return updateCourierProfile(tx, out, courierId, { workMode: mode, isAvailable: courier.isAvailable && !readinessError({ ...courier, workMode: mode }) });
   });
   await matchCourierToOpenSearches(courierId).catch(() => 0);
   return profile;
 }
 
-/** Ends work access after suspension or a lost affiliation: open offers are withdrawn, availability off. */
-export async function revokeCourierAvailability(courierId: string, reason: string) {
-  return withdrawCourierWork(courierId, reason, () => ({ isAvailable: false }));
+/** Free-search offers from the old area are withdrawn; open searches in the new area are offered. */
+export async function setCourierServiceArea(courierId: string, city: string, zone: string) {
+  const current = await db.courierProfile.findUnique({ where: { userId: courierId } });
+  assert(current, 404, 'NOT_FOUND', 'Профиль курьера не найден');
+  if (current.city === city && current.serviceZone === zone) return current;
+  const profile = await changeCourierState(courierId, asCourier(courierId), { reason: 'SERVICE_AREA_CHANGED', where: { mode: 'UZBITE_COURIER' } }, (tx, out) => updateCourierProfile(tx, out, courierId, { city, serviceZone: zone }));
+  await matchCourierToOpenSearches(courierId).catch(() => 0);
+  return profile;
+}
+
+/** Platform admission (developer CLI for now). Suspension withdraws every open offer and goes offline. */
+export async function setCourierApproval(courierId: string, status: CourierApprovalStatus, options: { testAccount?: boolean } = {}) {
+  const suspend = status === 'SUSPENDED';
+  return changeCourierState(courierId, SYSTEM, suspend ? { reason: 'COURIER_SUSPENDED' } : null, (tx, out) => updateCourierProfile(tx, out, courierId, {
+    approvalStatus: status, ...(suspend ? { isAvailable: false } : {}), ...(options.testAccount === undefined ? {} : { isTestAccount: options.testAccount }),
+  }));
+}
+
+/**
+ * Ends a restaurant affiliation, by the courier or by the restaurant. Personal offers from that
+ * restaurant are withdrawn; without another affiliation a RESTAURANT-mode courier goes offline.
+ */
+export async function endAffiliation(affiliationId: string, owner: { courierId: string } | { restaurantId: string }, actor: DispatchActor) {
+  const affiliation = await db.restaurantCourierAffiliation.findFirst({ where: { id: affiliationId, ...owner } });
+  assert(affiliation, 404, 'NOT_FOUND', 'Привязка не найдена');
+  const { courierId, restaurantId } = affiliation;
+  return changeCourierState(courierId, actor, { reason: 'AFFILIATION_ENDED', where: { mode: 'RESTAURANT_COURIER', delivery: { restaurantId } } }, async (tx, out, courier) => {
+    const current = await tx.restaurantCourierAffiliation.findUniqueOrThrow({ where: { id: affiliationId } });
+    if (current.status === 'ENDED') return current;
+    assert(!await tx.delivery.findFirst({ where: { courierId, restaurantId, status: { in: ACTIVE_DELIVERY } }, select: { id: true } }), 409, 'ACTIVE_DELIVERY', 'Сначала завершите текущую доставку этого ресторана');
+    const ended = await tx.restaurantCourierAffiliation.update({ where: { id: affiliationId }, data: { status: 'ENDED', endedAt: new Date(), endedBy: actor.role } });
+    const remaining = courier.affiliatedRestaurantIds.filter(id => id !== restaurantId).length;
+    if (!remaining && courier.workMode === 'RESTAURANT' && courier.isAvailable) await updateCourierProfile(tx, out, courierId, { isAvailable: false });
+    out.emit([`courier:${courierId}`, `restaurant:${restaurantId}`], 'courier:affiliation_updated', { affiliationId, restaurantId, courierId, status: 'ENDED' });
+    return ended;
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Restaurant order handling
+// ---------------------------------------------------------------------------------------------
+
+async function restaurantOrder(client: Tx, orderId: string) {
+  return restaurantOrderDto(await client.order.findUniqueOrThrow({ where: { id: orderId }, include: restaurantOrderInclude }));
+}
+export async function getRestaurantOrder(restaurantId: string, orderId: string) {
+  const order = await db.order.findFirst({ where: { id: orderId, restaurantId }, include: restaurantOrderInclude });
+  assert(order, 404, 'NOT_FOUND', 'Заказ не найден');
+  return restaurantOrderDto(order);
+}
+
+/** Accept or start preparing. Order/payment rules (a card order must be PAID) come from applyOrderState. */
+export async function advanceRestaurantOrder(restaurantId: string, orderId: string, to: 'ACCEPTED' | 'PREPARING') {
+  await assertRestaurantOrder(restaurantId, orderId);
+  return dispatchTx(async (tx, out) => {
+    const order = await lockedOrder(tx, orderId);
+    if (order.status !== to) {
+      queueOrderUpdate(out, await applyOrderState(tx, orderId, to));
+      out.restaurant(restaurantId, 'order:updated', { orderId, status: to });
+    }
+    return restaurantOrder(tx, orderId);
+  });
+}
+
+/** The restaurant's decision on a card transfer. A receipt screenshot never marks a payment PAID by itself. */
+export async function decideCardPayment(restaurantId: string, orderId: string, input: { status: 'PAID' | 'REJECTED'; reason?: string | null }) {
+  const reason = input.status === 'REJECTED' ? reasonText(input.reason, true)! : undefined;
+  await assertRestaurantOrder(restaurantId, orderId);
+  return dispatchTx(async (tx, out) => {
+    const order = await lockedOrder(tx, orderId);
+    assert(order.payment?.method === 'CARD', 409, 'NOT_CARD_PAYMENT', 'Подтверждение нужно только для оплаты картой');
+    if (order.payment.status !== input.status) {
+      queueOrderUpdate(out, await applyOrderState(tx, orderId, order.status, input.status, reason));
+      out.restaurant(restaurantId, 'order:updated', { orderId, paymentStatus: input.status });
+    }
+    return restaurantOrder(tx, orderId);
+  });
+}
+
+/** Cancels an order before the courier picked it up. The reason is stored and shown to the customer. */
+export async function cancelRestaurantOrder(restaurantId: string, orderId: string, reason: string, actor: DispatchActor) {
+  const text = reasonText(reason, true)!;
+  await assertRestaurantOrder(restaurantId, orderId);
+  return dispatchTx(async (tx, out) => {
+    const order = await lockedOrder(tx, orderId);
+    if (order.status === 'CANCELLED') return restaurantOrder(tx, orderId);
+    assert(['PENDING_ACCEPTANCE', 'ACCEPTED', 'PREPARING'].includes(order.status), 409, 'ORDER_NOT_CANCELLABLE', 'Заказ уже в пути или завершён');
+    const existing = await tx.delivery.findUnique({ where: { orderId }, select: { id: true } });
+    if (existing) {
+      await lockRows(tx, { deliveries: [existing.id] });
+      const delivery = await tx.delivery.findUniqueOrThrow({ where: { id: existing.id } });
+      if (AFTER_PICKUP.includes(delivery.status)) throw new ApiError(409, 'USE_ISSUE_PROCEDURE', 'Курьер уже забрал заказ. Отмена возможна только через обращение курьера');
+      const at = new Date();
+      await closeOffers(tx, out, await tx.deliveryOffer.findMany({ where: { deliveryId: delivery.id, status: 'PENDING' } }), 'WITHDRAWN', 'ORDER_CANCELLED', actor, false);
+      const formerCourier = delivery.courierId;
+      if (formerCourier && BEFORE_PICKUP.includes(delivery.status)) {
+        await tx.deliveryOffer.updateMany({ where: { deliveryId: delivery.id, courierId: formerCourier, status: 'ACCEPTED', releasedAt: null }, data: { releasedAt: at, releaseReason: text } });
+        await notifyCourier(tx, out, formerCourier, 'RELEASED_BY_RESTAURANT', { deliveryId: delivery.id, orderId, restaurantName: order.restaurantName });
+      }
+      if (!['DELIVERED', 'FAILED', 'CANCELLED'].includes(delivery.status)) {
+        const cancelled = await tx.delivery.update({ where: { id: delivery.id }, data: { status: 'CANCELLED', courierId: null, closedAt: at, closeReason: text, version: nextVersion } });
+        await audit(tx, delivery.id, 'DELIVERY_CANCELLED', actor, { from: delivery.status, to: cancelled.status, reason: text });
+        signal(out, 'delivery:cancelled', cancelled, { reason: text }, formerCourier);
+      }
+    }
+    queueOrderUpdate(out, await applyOrderState(tx, orderId, 'CANCELLED'));
+    await tx.order.update({ where: { id: orderId }, data: { cancellationReason: text, cancelledAt: new Date() } });
+    out.restaurant(restaurantId, 'order:updated', { orderId, status: 'CANCELLED' });
+    return restaurantOrder(tx, orderId);
+  });
 }
 
 // ---------------------------------------------------------------------------------------------

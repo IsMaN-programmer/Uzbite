@@ -325,19 +325,23 @@ test('Security and limits: foreign access, eligibility, one active delivery, han
   await affiliate(suspended);
   await dispatch.offerToOwnCourier(RESTAURANT, orderB, { courierId: suspended }, staff);
   const deliveryB = (await deliveryOf(orderB)).id;
+  // A status changed behind the courier's back is caught at acceptance time.
   await db.courierProfile.update({ where: { userId: suspended }, data: { approvalStatus: 'SUSPENDED' } });
   await rejectsWith(dispatch.acceptOffer(suspended, (await offerFor(suspended, deliveryB)).id), 'COURIER_SUSPENDED');
   await rejectsWith(dispatch.setCourierAvailability(suspended, true), 'COURIER_SUSPENDED');
-  await dispatch.revokeCourierAvailability(suspended, 'COURIER_SUSPENDED');
+  const blocked = await dispatch.setCourierApproval(suspended, 'SUSPENDED');
+  assert.equal(blocked.isAvailable, false);
   assert.equal((await offerFor(suspended, deliveryB)).status, 'WITHDRAWN');
   assert.equal((await deliveryOf(orderB)).status, 'NOT_REQUESTED');
 
+  // The work mode is a preference; going online checks the permission for it.
   const newcomer = await makeCourier('sec_new', { approvalStatus: 'PENDING' });
-  await rejectsWith(dispatch.setCourierWorkMode(newcomer, 'FREELANCE'), 'MODE_NOT_ALLOWED');
-  await rejectsWith(dispatch.setCourierWorkMode(newcomer, 'RESTAURANT'), 'MODE_NOT_ALLOWED');
   await rejectsWith(dispatch.setCourierAvailability(newcomer, true), 'WORK_MODE_REQUIRED');
-  await affiliate(newcomer);
+  await dispatch.setCourierWorkMode(newcomer, 'FREELANCE');
+  await rejectsWith(dispatch.setCourierAvailability(newcomer, true), 'MODE_NOT_ALLOWED');
   assert.equal((await dispatch.setCourierWorkMode(newcomer, 'RESTAURANT')).workMode, 'RESTAURANT');
+  await rejectsWith(dispatch.setCourierAvailability(newcomer, true), 'MODE_NOT_ALLOWED');
+  await affiliate(newcomer);
   await dispatch.setCourierAvailability(newcomer, true);
   await dispatch.offerToOwnCourier(RESTAURANT, orderB, { courierId: newcomer }, staff);
   await dispatch.setCourierAvailability(newcomer, false);

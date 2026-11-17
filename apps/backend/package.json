@@ -9,6 +9,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test src/**/*.test.ts",
     "start": "node dist/index.js",
-    "order:status": "tsx src/scripts/order-status.ts"
+    "order:status": "tsx src/scripts/order-status.ts",
+    "restaurant:staff": "tsx src/scripts/restaurant-staff.ts",
+    "courier:approve": "tsx src/scripts/courier-approve.ts"
   }
 }

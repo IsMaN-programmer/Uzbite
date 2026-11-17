@@ -9,11 +9,10 @@ import { assert } from '../utils/errors.js';
 import { publicUserSelect } from '../utils/serialize.js';
 import { disconnectSession } from '../services/realtime.js';
 import { env } from '../config/env.js';
+import { DUMMY_PASSWORD_HASH, emailSchema, loginPasswordSchema, newPasswordSchema } from '../utils/validators.js';
 
-const email = z.string().trim().pipe(z.email().max(254)).transform(s => s.toLowerCase());
-const password = z.string().min(8).max(72).refine(value => Buffer.byteLength(value, 'utf8') <= 72, 'Пароль должен занимать не больше 72 байт');
-const registerSchema = z.object({ email, password, language: z.enum(['ru', 'uz', 'en']).default('ru'), theme: z.enum(['light', 'dark']).default('light') }).strict();
-const loginSchema = z.object({ email, password: z.string().min(1).max(72).refine(value => Buffer.byteLength(value, 'utf8') <= 72, 'Пароль должен занимать не больше 72 байт') }).strict();
+const registerSchema = z.object({ email: emailSchema, password: newPasswordSchema, language: z.enum(['ru', 'uz', 'en']).default('ru'), theme: z.enum(['light', 'dark']).default('light') }).strict();
+const loginSchema = z.object({ email: emailSchema, password: loginPasswordSchema }).strict();
 export const authRouter = Router();
 authRouter.get('/csrf', csrfIssue);
 authRouter.post('/register', rateLimit('register', env.NODE_ENV === 'production' ? 10 : 100, 3600), async (req, res) => {
@@ -28,8 +27,7 @@ authRouter.post('/register', rateLimit('register', env.NODE_ENV === 'production'
 authRouter.post('/login', rateLimit('login', 20, 900), async (req, res) => {
   const input = loginSchema.parse(req.body);
   const user = await db.user.findUnique({ where: { email: input.email }, include: { settings: true } });
-  const dummy = '$2b$12$W5HK5wNwf86cby4uX7JS6evD8f54zyvWLVoDjxZdjAh60sFdn7A8S';
-  const valid = await bcrypt.compare(input.password, user?.passwordHash ?? dummy);
+  const valid = await bcrypt.compare(input.password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
   assert(user && valid && user.role === 'USER', 401, 'INVALID_CREDENTIALS', 'Неверная почта или пароль');
   await createSession(res, user);
   const safe = await db.user.findUnique({ where: { id: user.id }, select: publicUserSelect });
