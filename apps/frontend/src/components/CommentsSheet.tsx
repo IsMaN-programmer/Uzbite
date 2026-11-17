@@ -1,0 +1,19 @@
+import {useEffect,useState} from 'react';
+import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query';
+import type {Comment} from '@uzbite/shared';
+import {api,friendlyError} from '../lib/api';
+import {useApp} from '../context/AppContext';
+import {Modal,EmptyState,ErrorState} from './UI';
+import {Icon} from './icons/Icon';
+import type {PaginatedCollection} from '../lib/pagination';
+export function CommentsSheet({postId,onClose}:{postId:string;onClose:()=>void}){
+ const{t,language,notify,joinPost,leavePost}=useApp();const client=useQueryClient();const[text,setText]=useState('');const[page,setPage]=useState(1);const[reply,setReply]=useState<Comment|null>(null);
+ useEffect(()=>{joinPost(postId);return()=>leavePost(postId);},[postId,joinPost,leavePost]);
+ const result=useQuery({queryKey:['comments',postId,page],queryFn:async()=>(await api.get<PaginatedCollection<Comment>>(`/posts/${postId}/comments`,{params:{page,pageSize:12}})).data,refetchInterval:30000});
+ const mutation=useMutation({mutationFn:()=>api.post(`/posts/${postId}/comments`,{text,parentId:reply?.id}),onSuccess:()=>{setText('');setReply(null);setPage(1);void client.invalidateQueries({queryKey:['comments',postId]});void client.invalidateQueries({queryKey:['feed']});},onError:e=>notify(friendlyError(e))});
+ const comments=result.data?.data??[];const roots=comments.filter(c=>!c.parentId);const rows=roots.length?roots:comments;
+ function row(c:Comment,nested=false){return <div key={c.id} className={`flex gap-3 py-4 ${nested?'ml-10 border-l border-[var(--border)] pl-4':''}`}><div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--soft)] text-sm font-bold text-brand">{c.user.avatarUrl?<img src={c.user.avatarUrl} alt="" className="h-full w-full object-cover"/>:c.user.name.slice(0,1)}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2 text-xs"><strong>{c.user.name}</strong><time className="text-[var(--muted)]">{new Date(c.createdAt).toLocaleString(language,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</time></div><p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-relaxed">{c.text}</p><button onClick={()=>setReply({...c,id:c.parentId??c.id})} className="mt-2 text-xs font-semibold text-[var(--muted)] hover:text-brand">{t('reply')}</button></div></div>;}
+ return <Modal title={t('comments')} onClose={onClose}><div className="min-h-60 flex-1 overflow-y-auto px-5">{result.isPending?<div className="skeleton my-6 h-24"/>:result.isError?<ErrorState message={friendlyError(result.error)} retry={()=>void result.refetch()}/>:!comments.length?<EmptyState icon="comments" title={t('empty')}/>:rows.map(c=><div key={c.id}>{row(c)}{(c.replies??comments.filter(r=>r.parentId===c.id)).map(r=>row(r,true))}</div>)}<div className="my-4 flex justify-center gap-3">{page>1&&<button className="button-secondary" onClick={()=>setPage(p=>p-1)}><Icon name="back" size={16}/>{page-1}</button>}{result.data?.pagination.hasMore&&<button className="button-secondary" onClick={()=>setPage(p=>p+1)}>{t('loadMore')}<Icon name="arrow" size={16}/></button>}</div></div><form onSubmit={e=>{e.preventDefault();if(text.trim())mutation.mutate();}} className="safe-bottom border-t border-[var(--border)] p-5">{reply&&<div className="mb-2 flex items-center justify-between text-xs text-brand"><span>{t('reply')} · {reply.user.name}</span><button type="button" aria-label={t('cancel')} onClick={()=>setReply(null)}><Icon name="close" size={15}/></button></div>}<div className="flex items-center gap-2"><input className="input" value={text} maxLength={2000} aria-label={t('commentPlaceholder')} placeholder={t('commentPlaceholder')} onChange={e=>setText(e.target.value)}/><button className="button-primary h-12 w-12 shrink-0 p-0" disabled={!text.trim()||mutation.isPending} aria-label={t('send')}><Icon name="arrow" size={20}/></button></div></form></Modal>;
+}
+
+

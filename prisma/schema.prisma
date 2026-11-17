@@ -1,0 +1,349 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  RESTAURANT
+  COURIER
+}
+
+enum OrderStatus {
+  PENDING_ACCEPTANCE
+  ACCEPTED
+  PREPARING
+  DELIVERING
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+}
+
+enum PaymentStatus {
+  AWAITING_PAYMENT
+  AWAITING_CONFIRMATION
+  PAID
+  REJECTED
+}
+
+enum MediaType {
+  VIDEO
+  IMAGE
+}
+
+enum UploadPurpose {
+  AVATAR
+  RECEIPT
+}
+
+model User {
+  id                String         @id @default(cuid())
+  email             String?        @unique
+  passwordHash      String
+  name              String
+  username          String         @unique
+  usernameChangedAt DateTime?
+  bio               String         @default("")
+  avatarUrl         String?
+  recipientName     String?
+  deliveryAddressId String?
+  deliveryAddress   UserAddress?   @relation("DeliverySelection", fields: [deliveryAddressId], references: [id], onDelete: SetNull)
+  phone             String?
+  role              Role           @default(USER)
+  tokenVersion      Int            @default(0)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  settings          UserSettings?
+  addresses         UserAddress[]
+  likes             Like[]
+  comments          Comment[]
+  follows           Follow[]
+  reviews           Review[]
+  orders            Order[]
+  notifications     Notification[]
+  uploads           Upload[]
+  sessions          Session[]
+
+  @@index([deliveryAddressId])
+}
+
+model Session {
+  id          String   @id @default(cuid())
+  userId      String
+  refreshHash String
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model UserSettings {
+  userId   String @id
+  language String @default("ru")
+  theme    String @default("light")
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserAddress {
+  id          String   @id @default(cuid())
+  userId      String
+  latitude    Float
+  longitude   Float
+  addressText String
+  label       String   @default("Дом")
+  entrance    String   @default("")
+  floor       String   @default("")
+  apartment   String   @default("")
+  comment     String   @default("")
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  selectedBy  User[]   @relation("DeliverySelection")
+
+  @@index([userId])
+}
+
+model Restaurant {
+  id                  String               @id @default(cuid())
+  slug                String               @unique
+  name                String
+  description         String
+  logoUrl             String
+  coverUrl            String
+  galleryUrls         String[]             @default([])
+  addressText         String
+  latitude            Float
+  longitude           Float
+  phone               String?
+  telegram            String?
+  isOpen              Boolean              @default(true)
+  preparationMinutes  Int                  @default(20)
+  deliveryFee         Decimal              @default(10000) @db.Decimal(14, 2)
+  minOrder            Decimal              @default(20000) @db.Decimal(14, 2)
+  paymentDetails      String?
+  paymentQrUrl        String?
+  paymentInstructions String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  categories          RestaurantCategory[]
+  dishes              Dish[]
+  posts               Post[]
+  follows             Follow[]
+  reviews             Review[]
+  orders              Order[]
+
+  @@index([name])
+}
+
+model RestaurantCategory {
+  id           String     @id @default(cuid())
+  restaurantId String
+  name         String
+  sortOrder    Int        @default(0)
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  dishes       Dish[]
+
+  @@unique([restaurantId, name])
+}
+
+model Dish {
+  id           String             @id @default(cuid())
+  restaurantId String
+  categoryId   String
+  name         String
+  description  String
+  price        Decimal            @db.Decimal(14, 2)
+  imageUrl     String
+  isAvailable  Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  restaurant   Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  category     RestaurantCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  posts        Post[]
+  orderItems   OrderItem[]
+
+  @@index([restaurantId, isAvailable])
+  @@index([name])
+}
+
+model Post {
+  id           String      @id @default(cuid())
+  restaurantId String
+  dishId       String?
+  caption      String
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  dish         Dish?       @relation(fields: [dishId], references: [id], onDelete: SetNull)
+  media        PostMedia[]
+  likes        Like[]
+  comments     Comment[]
+
+  @@index([createdAt])
+  @@index([restaurantId, createdAt])
+}
+
+model PostMedia {
+  id        String    @id @default(cuid())
+  postId    String
+  url       String
+  posterUrl String?
+  type      MediaType @default(VIDEO)
+  duration  Float?
+  width     Int?
+  height    Int?
+  size      Int?
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId, sortOrder])
+}
+
+model Like {
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId])
+  @@index([postId])
+}
+
+model Comment {
+  id        String    @id @default(cuid())
+  userId    String
+  postId    String
+  parentId  String?
+  text      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Comment[] @relation("CommentReplies")
+
+  @@index([postId, createdAt])
+  @@index([parentId])
+}
+
+model Follow {
+  userId       String
+  restaurantId String
+  createdAt    DateTime   @default(now())
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@id([userId, restaurantId])
+  @@index([restaurantId])
+}
+
+model Review {
+  id           String     @id @default(cuid())
+  orderId      String     @unique
+  userId       String
+  restaurantId String
+  rating       Int
+  text         String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  order        Order      @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+
+  @@index([restaurantId, createdAt])
+}
+
+model Order {
+  id                String      @id @default(cuid())
+  userId            String
+  restaurantId      String
+  restaurantName    String
+  restaurantAddress String
+  addressSnapshot   Json
+  recipientName     String
+  recipientPhone    String
+  subtotal          Decimal     @db.Decimal(14, 2)
+  deliveryFee       Decimal     @db.Decimal(14, 2)
+  total             Decimal     @db.Decimal(14, 2)
+  status            OrderStatus @default(PENDING_ACCEPTANCE)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  user              User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  restaurant        Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  items             OrderItem[]
+  payment           Payment?
+  review            Review?
+
+  @@index([userId, createdAt])
+  @@index([restaurantId, status])
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  dishId    String?
+  dishName  String
+  unitPrice Decimal @db.Decimal(14, 2)
+  quantity  Int
+  imageUrl  String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  dish      Dish?   @relation(fields: [dishId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  orderId         String        @unique
+  method          PaymentMethod
+  status          PaymentStatus @default(AWAITING_PAYMENT)
+  receiptId       String?       @unique
+  rejectionReason String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  order           Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  receipt         Upload?       @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+}
+
+model Upload {
+  id        String        @id @default(cuid())
+  userId    String
+  key       String        @unique
+  mimeType  String
+  size      Int
+  purpose   UploadPurpose
+  createdAt DateTime      @default(now())
+  user      User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  payment   Payment?
+
+  @@index([userId, purpose])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  link      String
+  metadata  Json?
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+}
