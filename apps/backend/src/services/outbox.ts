@@ -1,7 +1,7 @@
 import { db } from '../config/database.js';
 import { customerOrderJson, orderInclude } from './orders.js';
 import { notificationDto } from './notifications.js';
-import { ioEvent } from './realtime.js';
+import { ioEvent, leaveRoom } from './realtime.js';
 
 /**
  * Realtime side effects collected during a transaction and emitted only after it commits.
@@ -12,6 +12,7 @@ export class Outbox {
   private customerOrders = new Set<string>();
   private customerNotifications: string[] = [];
   private accountNotifications: string[] = [];
+  private evictions: { userId: string; room: string }[] = [];
   /** Several rooms in one emit reach a socket that joined more than one of them only once. */
   emit(room: string | string[], event: string, payload: unknown) { this.events.push({ room, event, payload }); return this; }
   courier(courierId: string, event: string, payload: unknown) { return this.emit(`courier:${courierId}`, event, payload); }
@@ -19,9 +20,12 @@ export class Outbox {
   customerOrder(orderId: string) { this.customerOrders.add(orderId); return this; }
   customerNotification(id: string) { this.customerNotifications.push(id); return this; }
   accountNotification(id: string) { this.accountNotifications.push(id); return this; }
+  /** After the events above are delivered, the account's sockets leave the room (e.g. a released courier). */
+  leave(userId: string, room: string) { this.evictions.push({ userId, room }); return this; }
   async flush() {
     try {
       for (const item of this.events) ioEvent(item.room, item.event, item.payload);
+      for (const item of this.evictions) leaveRoom(item.userId, item.room);
       for (const orderId of this.customerOrders) {
         const order = await db.order.findUnique({ where: { id: orderId }, include: orderInclude });
         if (order) ioEvent([`user:${order.userId}`, `order:${order.id}`], 'order:updated', customerOrderJson(order));

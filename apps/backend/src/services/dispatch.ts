@@ -231,6 +231,7 @@ async function releaseCourier(tx: Tx, out: Outbox, delivery: Delivery, reason: s
   await audit(tx, delivery.id, 'COURIER_RELEASED', actor, { from: delivery.status, to: updated.status, reason });
   out.customerOrder(delivery.orderId);
   signal(out, 'delivery:cancelled', updated, { reason }, courierId);
+  out.leave(courierId, `delivery:${delivery.id}`);
   return updated;
 }
 type LockedDelivery = Prisma.DeliveryGetPayload<{ include: { order: { include: { payment: true } } } }>;
@@ -726,6 +727,7 @@ export async function resolveIssue(restaurantId: string, issueId: string, input:
       queueOrderUpdate(out, await applyOrderState(tx, delivery.orderId, 'CANCELLED'));
       await audit(tx, delivery.id, 'DELIVERY_FAILED', actor, { from: delivery.status, to: failed.status, reason: issue.reason });
       signal(out, 'delivery:cancelled', failed);
+      out.leave(delivery.courierId!, `delivery:${delivery.id}`);
     }
     await notifyCourier(tx, out, issue.courierId, 'ISSUE_RESOLVED', context, { issueId, issueType: issue.type, resolution: input.resolution });
     const current = input.resolution === 'REJECT' ? await tx.delivery.update({ where: { id: delivery.id }, data: { version: nextVersion } }) : await tx.delivery.findUniqueOrThrow({ where: { id: delivery.id } });
@@ -905,7 +907,7 @@ export async function advanceRestaurantOrder(restaurantId: string, orderId: stri
     const order = await lockedOrder(tx, orderId);
     if (order.status !== to) {
       queueOrderUpdate(out, await applyOrderState(tx, orderId, to));
-      out.restaurant(restaurantId, 'order:updated', { orderId, status: to });
+      out.restaurant(restaurantId, 'restaurant:order_updated', { orderId, status: to });
     }
     return restaurantOrder(tx, orderId);
   });
@@ -920,7 +922,7 @@ export async function decideCardPayment(restaurantId: string, orderId: string, i
     assert(order.payment?.method === 'CARD', 409, 'NOT_CARD_PAYMENT', 'Подтверждение нужно только для оплаты картой');
     if (order.payment.status !== input.status) {
       queueOrderUpdate(out, await applyOrderState(tx, orderId, order.status, input.status, reason));
-      out.restaurant(restaurantId, 'order:updated', { orderId, paymentStatus: input.status });
+      out.restaurant(restaurantId, 'restaurant:order_updated', { orderId, paymentStatus: input.status });
     }
     return restaurantOrder(tx, orderId);
   });
@@ -950,11 +952,12 @@ export async function cancelRestaurantOrder(restaurantId: string, orderId: strin
         const cancelled = await tx.delivery.update({ where: { id: delivery.id }, data: { status: 'CANCELLED', courierId: null, closedAt: at, closeReason: text, version: nextVersion } });
         await audit(tx, delivery.id, 'DELIVERY_CANCELLED', actor, { from: delivery.status, to: cancelled.status, reason: text });
         signal(out, 'delivery:cancelled', cancelled, { reason: text }, formerCourier);
+        if (formerCourier) out.leave(formerCourier, `delivery:${delivery.id}`);
       }
     }
     queueOrderUpdate(out, await applyOrderState(tx, orderId, 'CANCELLED'));
     await tx.order.update({ where: { id: orderId }, data: { cancellationReason: text, cancelledAt: new Date() } });
-    out.restaurant(restaurantId, 'order:updated', { orderId, status: 'CANCELLED' });
+    out.restaurant(restaurantId, 'restaurant:order_updated', { orderId, status: 'CANCELLED' });
     return restaurantOrder(tx, orderId);
   });
 }

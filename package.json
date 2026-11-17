@@ -20,7 +20,7 @@
     "test": "tsx --test apps/backend/src/**/*.test.ts tests/unit/*.test.ts",
     "test:integration": "tsx --test tests/integration.test.ts",
     "test:dispatch": "tsx --test tests/dispatch.integration.test.ts",
-    "test:courier": "tsx --test tests/courier.integration.test.ts",
+    "test:courier": "tsx --test --test-timeout=120000 tests/courier.integration.test.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",

@@ -146,10 +146,24 @@ export interface CourierEarnings {
 export interface CourierAffiliationDto { id: string; restaurant: RestaurantBrief; status: 'ACTIVE' | 'ENDED'; invitedAt: string; confirmedAt: string; endedAt: string | null }
 export interface CourierInvitationDto { id: string; restaurant: RestaurantBrief; status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'REVOKED' | 'EXPIRED'; expiresAt: string; createdAt: string }
 
-/** Socket.IO events. Payloads are hints; clients re-read REST, which is the source of truth. */
+/**
+ * Socket.IO events. Payloads are hints; clients re-read REST, which is the source of truth.
+ * Native apps connect with `auth: { token: accessToken }` and are placed in their rooms by the
+ * server: courier:{id} or restaurant:{id}, plus user:{id} for `notification:created`.
+ */
 export const DELIVERY_SOCKET_EVENTS = [
   'delivery:offer_created', 'delivery:offer_accepted', 'delivery:offer_rejected', 'delivery:offer_expired', 'delivery:offer_withdrawn', 'delivery:offer_taken',
   'delivery:courier_assigned', 'delivery:search_started', 'delivery:pickup_ready', 'delivery:picked_up', 'delivery:status_updated',
   'delivery:completed', 'delivery:cancelled', 'delivery:issue_updated', 'courier:profile_updated', 'courier:affiliation_updated', 'notification:created',
 ] as const;
 export type DeliverySocketEvent = typeof DELIVERY_SOCKET_EVENTS[number];
+/** Restaurant room only: new customer orders and changes of order or payment status. */
+export const RESTAURANT_SOCKET_EVENTS = ['restaurant:order_created', 'restaurant:order_updated'] as const;
+export type RestaurantSocketEvent = typeof RESTAURANT_SOCKET_EVENTS[number];
+/**
+ * Client → server requests, each answered `{ ok }` by acknowledgement. `delivery:join` is allowed
+ * for the delivery's restaurant and its currently assigned courier; `order:join` for its customer.
+ */
+export const SOCKET_CLIENT_EVENTS = ['delivery:join', 'delivery:leave', 'order:join', 'post:join', 'post:leave'] as const;
+/** Every delivery hint carries at least these fields; `version` grows with each change. */
+export interface DeliverySocketHint { deliveryId: string; orderId: string; status: DeliveryStatus; version: number }

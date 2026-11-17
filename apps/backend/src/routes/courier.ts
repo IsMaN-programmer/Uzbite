@@ -49,7 +49,7 @@ courierRouter.post('/auth/register', rateLimit('courier-register', env.NODE_ENV 
   } catch (error) { if (emailTaken(error)) throw emailTakenError(); throw error; }
   res.status(201).json({ data: { tokens: session.tokens, account: await courierAccount(session.userId) } });
 });
-courierRouter.post('/auth/login', rateLimit('courier-login', 20, 900), async (req, res) => {
+courierRouter.post('/auth/login', rateLimit('courier-login', env.NODE_ENV === 'production' ? 20 : 200, 900), async (req, res) => {
   const input = appLoginSchema.parse(req.body);
   const user = await verifyAppLogin(input.email, input.password, 'COURIER');
   res.json({ data: { tokens: await createAppSession(user), account: await courierAccount(user.id) } });

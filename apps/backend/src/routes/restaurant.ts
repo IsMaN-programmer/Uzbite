@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '../config/database.js';
+import { env } from '../config/env.js';
 import { requireRestaurantStaff } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/security.js';
 import { createAppSession, refreshAppSession, revokeAppSession } from '../services/auth.js';
@@ -32,7 +33,7 @@ async function restaurantAccount(userId: string) {
   return { id: user.id, email: user.email, role: 'RESTAURANT' as const, settings: { language: user.settings?.language ?? 'ru', theme: user.settings?.theme ?? 'light' }, restaurant: user.restaurantStaff.restaurant };
 }
 
-restaurantRouter.post('/auth/login', rateLimit('restaurant-login', 20, 900), async (req, res) => {
+restaurantRouter.post('/auth/login', rateLimit('restaurant-login', env.NODE_ENV === 'production' ? 20 : 200, 900), async (req, res) => {
   const input = appLoginSchema.parse(req.body);
   const user = await verifyAppLogin(input.email, input.password, 'RESTAURANT');
   // A staff account without a restaurant link gets the same answer as wrong credentials.

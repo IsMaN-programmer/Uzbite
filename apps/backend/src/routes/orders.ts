@@ -70,6 +70,6 @@ orderRouter.post('/', rateLimit('orders', 20, 900), async (req, res) => {
   ioEvent(`user:${userId}`, 'order:updated', customerOrderJson(result.order));
   ioEvent(`user:${userId}`, 'notification', notificationDto(result.notification, result.language));
   // A hint for the restaurant app; it re-reads its order list over REST.
-  ioEvent(`restaurant:${result.order.restaurantId}`, 'order:created', { orderId: result.order.id });
+  ioEvent(`restaurant:${result.order.restaurantId}`, 'restaurant:order_created', { orderId: result.order.id });
   res.status(201).json({ data: customerOrderJson(result.order) });
 });

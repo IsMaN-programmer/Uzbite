@@ -4,7 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
-import type { AuthTokens, CourierAccount, CourierDelivery, CourierEarnings, CourierHistoryItem, CourierOffer } from '@uzbite/shared';
+import { io, type Socket } from 'socket.io-client';
+import type { AuthTokens, CourierAccount, CourierDelivery, CourierEarnings, CourierHistoryItem, CourierOffer, DeliverySocketHint } from '@uzbite/shared';
 import { db } from '../apps/backend/src/config/database.js';
 
 // REST tests of the courier and restaurant APIs against the running API and real PostgreSQL.
@@ -40,8 +41,9 @@ class AppClient {
 class BrowserSession {
   cookies = new Map<string, string>();
   csrf = '';
+  cookieHeader() { return [...this.cookies].map(([key, value]) => `${key}=${value}`).join('; '); }
   async request<T = Json>(method: string, path: string, body?: unknown): Promise<Reply<T>> {
-    const response = await fetch(`${base}/api${path}`, { method, headers: { Origin: origin, Cookie: [...this.cookies].map(([key, value]) => `${key}=${value}`).join('; '), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(method === 'GET' ? {} : { 'X-CSRF-Token': this.csrf }) }, body: body === undefined ? undefined : JSON.stringify(body) });
+    const response = await fetch(`${base}/api${path}`, { method, headers: { Origin: origin, Cookie: this.cookieHeader(), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(method === 'GET' ? {} : { 'X-CSRF-Token': this.csrf }) }, body: body === undefined ? undefined : JSON.stringify(body) });
     for (const cookie of response.headers.getSetCookie()) { const [pair] = cookie.split(';'); const index = pair!.indexOf('='); this.cookies.set(pair!.slice(0, index), pair!.slice(index + 1)); }
     const payload = await response.json() as { data: T; error?: { code: string; message: string } };
     return { status: response.status, data: payload.data, error: payload.error };
@@ -315,4 +317,98 @@ test('Restaurant cancels with a reason the customer sees; suspension and payment
   assert.equal(account.profile.availability, 'UNAVAILABLE');
   assert.deepEqual(account.profile.permissions, { restaurantMode: false, freelanceMode: false, reason: 'SUSPENDED' });
   assert.equal((await courier.request('PATCH', '/courier/availability', { available: true })).error?.code, 'COURIER_SUSPENDED');
+});
+
+const sockets: Socket[] = [];
+const outcomes = new WeakMap<Socket, Promise<boolean>>();
+/** The connection outcome is captured as the socket is created, so a fast connect is never missed. */
+function connect(options: { token?: string; cookie?: string } = {}) {
+  const socket = io(base, { transports: ['websocket'], reconnection: false, timeout: 4000, ...(options.token === undefined ? {} : { auth: { token: options.token } }), ...(options.cookie ? { extraHeaders: { Cookie: options.cookie, Origin: origin } } : {}) });
+  outcomes.set(socket, new Promise<boolean>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Socket neither connected nor failed')), 6000);
+    socket.once('connect', () => { clearTimeout(timer); resolve(true); });
+    socket.once('connect_error', () => { clearTimeout(timer); resolve(false); });
+  }));
+  sockets.push(socket);
+  return socket;
+}
+const opened = (socket: Socket) => outcomes.get(socket)!;
+/** A room request must always be answered; a missing acknowledgement fails instead of hanging. */
+const joins = (socket: Socket, event: string, id: string) => socket.timeout(5000).emitWithAck(event, id).then((reply: { ok: boolean }) => reply.ok, () => { throw new Error(`${event} was not acknowledged (connected: ${socket.connected})`); });
+function nextEvent<T>(socket: Socket, event: string) {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${event} did not arrive`)), 5000);
+    socket.once(event, (data: T) => { clearTimeout(timer); resolve(data); });
+  });
+}
+const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+test('Socket.IO: Bearer auth, server-assigned rooms, foreign rooms refused, events only after commit', async () => {
+  const { client: courier, id: courierId } = await registerCourier('socket_own');
+  const { client: stranger } = await registerCourier('socket_stranger');
+  await linkToRestaurant(osh, courier);
+  await onboard(courier, 'RESTAURANT');
+  await courier.request('PATCH', '/courier/availability', { available: true });
+  try {
+    assert.equal(await opened(connect()), false, 'No credentials, no connection');
+    assert.equal(await opened(connect({ token: `${courier.tokens!.accessToken.slice(0, -6)}abcdef` })), false, 'A tampered token is refused');
+    const courierSocket = connect({ token: courier.tokens!.accessToken }), strangerSocket = connect({ token: stranger.tokens!.accessToken });
+    const oshSocket = connect({ token: osh.tokens!.accessToken }), basilicoSocket = connect({ token: basilico.tokens!.accessToken });
+    for (const socket of [courierSocket, strangerSocket, oshSocket, basilicoSocket]) assert.equal(await opened(socket), true);
+    const seenByOthers: string[] = [];
+    strangerSocket.onAny(event => seenByOthers.push(`stranger:${event}`));
+    basilicoSocket.onAny(event => seenByOthers.push(`basilico:${event}`));
+
+    const orderCreated = nextEvent<{ orderId: string }>(oshSocket, 'restaurant:order_created');
+    const { customer, orderId } = await acceptedOrder(osh, 'socket_customer');
+    assert.equal((await orderCreated).orderId, orderId, 'The restaurant room hears about new orders');
+    const customerSocket = connect({ cookie: customer.cookieHeader() });
+    assert.equal(await opened(customerSocket), true);
+    assert.equal(await joins(customerSocket, 'order:join', orderId), true);
+    assert.equal(await joins(courierSocket, 'order:join', orderId), false, 'Order rooms carry the handoff code: customer only');
+    assert.equal(await joins(oshSocket, 'order:join', orderId), false);
+
+    const offered = nextEvent<{ offerId: string; deliveryId: string }>(courierSocket, 'delivery:offer_created');
+    const courierNotice = nextEvent<{ type: string; metadata: Json }>(courierSocket, 'notification:created');
+    await osh.request('POST', `/restaurant/orders/${orderId}/delivery/offer`, { courierId });
+    const offer = await offered;
+    assert.ok(await db.deliveryOffer.findUnique({ where: { id: offer.offerId } }), 'The event leaves only after the offer is committed');
+    assert.equal(JSON.stringify(offer).includes('+998907654321'), false);
+    assert.equal((await courierNotice).type, 'COURIER_DELIVERY');
+    const deliveryId = offer.deliveryId;
+    assert.equal(await joins(courierSocket, 'delivery:join', deliveryId), false, 'An offer is not an assignment');
+    assert.equal(await joins(oshSocket, 'delivery:join', deliveryId), true);
+    assert.equal(await joins(basilicoSocket, 'delivery:join', deliveryId), false);
+
+    const assignedHint = nextEvent<DeliverySocketHint>(oshSocket, 'delivery:courier_assigned');
+    const customerUpdate = nextEvent<{ delivery: { courierAssigned: boolean; handoffCode: string | null } }>(customerSocket, 'order:updated');
+    const offers = await courier.request<CourierOffer[]>('GET', '/courier/delivery-offers');
+    assert.equal((await courier.request('POST', `/courier/delivery-offers/${offers.data[0]!.id}/accept`)).status, 200);
+    const hint = await assignedHint;
+    assert.equal(hint.status, 'ASSIGNED');
+    assert.equal(hint.version, (await db.delivery.findUniqueOrThrow({ where: { id: deliveryId } })).version);
+    const update = await customerUpdate;
+    assert.equal(update.delivery.courierAssigned, true);
+    assert.match(update.delivery.handoffCode ?? '', /^\d{4}$/);
+    assert.equal(await joins(courierSocket, 'delivery:join', deliveryId), true, 'The assigned courier may follow the delivery');
+    assert.equal(await joins(strangerSocket, 'delivery:join', deliveryId), false);
+    assert.equal(await joins(customerSocket, 'delivery:join', deliveryId), false);
+
+    const released = nextEvent<DeliverySocketHint>(courierSocket, 'delivery:cancelled');
+    await osh.request('POST', `/restaurant/orders/${orderId}/delivery/cancel`, { reason: 'Проверка событий' });
+    assert.equal((await released).status, 'NOT_REQUESTED');
+    let releasedCourierHeard = false;
+    courierSocket.on('delivery:pickup_ready', () => { releasedCourierHeard = true; });
+    const ready = nextEvent<DeliverySocketHint>(oshSocket, 'delivery:pickup_ready');
+    await osh.request('POST', `/restaurant/orders/${orderId}/delivery/ready`);
+    await ready; await pause(300);
+    assert.equal(releasedCourierHeard, false, 'A released courier leaves the delivery room');
+    assert.deepEqual(seenByOthers, [], 'Other couriers and restaurants receive nothing about this order');
+
+    const dropped = nextEvent<string>(courierSocket, 'disconnect');
+    assert.equal((await courier.request('POST', '/courier/auth/logout', { refreshToken: courier.tokens!.refreshToken })).status, 200);
+    assert.equal(await dropped, 'io server disconnect', 'Logout closes the session socket');
+  } finally {
+    for (const socket of sockets) socket.disconnect();
+  }
 });
