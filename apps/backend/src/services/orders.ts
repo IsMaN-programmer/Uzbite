@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '../config/database.js';
 import { receiptStorageReady } from '../config/env.js';
 import { assert } from '../utils/errors.js';
+import { jsonValue } from '../utils/serialize.js';
 
 export const activeStatuses: OrderStatus[] = ['PENDING_ACCEPTANCE', 'ACCEPTED', 'PREPARING', 'DELIVERING'];
 export const cartSchema = z.object({ items: z.array(z.object({ dishId: z.string().min(1).max(100), quantity: z.number().int().min(1).max(99) }).strict()).min(1).max(50) }).strict().refine(value => new Set(value.items.map(item => item.dishId)).size === value.items.length, { message: 'Повторяющиеся блюда недопустимы' });
@@ -26,4 +27,18 @@ export async function quoteCart(input: CartInput, tx: Prisma.TransactionClient =
     items, subtotal, deliveryFee: restaurant.deliveryFee, total,
   };
 }
-export const orderInclude = { items: true, restaurant: { select: { id: true, name: true, logoUrl: true, phone: true, telegram: true } }, payment: { select: { id: true, method: true, status: true, rejectionReason: true, receiptId: true } }, review: { select: { id: true, rating: true, text: true } } } as const;
+export const orderInclude = { items: true, restaurant: { select: { id: true, name: true, logoUrl: true, phone: true, telegram: true } }, payment: { select: { id: true, method: true, status: true, rejectionReason: true, receiptId: true } }, review: { select: { id: true, rating: true, text: true } }, delivery: { select: { status: true, handoffCode: true, assignedAt: true, pickedUpAt: true, startedAt: true, deliveredAt: true } } } as const;
+type CustomerOrder = Prisma.OrderGetPayload<{ include: typeof orderInclude }>;
+const handoffVisible = ['ASSIGNED', 'READY_FOR_PICKUP', 'PICKED_UP', 'ON_THE_WAY'];
+/**
+ * Customer view of an order. The delivery handoff code is shown only to the order owner and only
+ * while a courier is assigned; no courier identity or location is exposed (no live tracking).
+ */
+export function customerOrderJson(order: CustomerOrder) {
+  const { delivery, ...rest } = order;
+  return jsonValue({ ...rest, delivery: delivery ? {
+    status: delivery.status, courierAssigned: handoffVisible.includes(delivery.status) || delivery.status === 'DELIVERED',
+    handoffCode: handoffVisible.includes(delivery.status) ? delivery.handoffCode : null,
+    assignedAt: delivery.assignedAt, pickedUpAt: delivery.pickedUpAt, startedAt: delivery.startedAt, deliveredAt: delivery.deliveredAt,
+  } : null });
+}

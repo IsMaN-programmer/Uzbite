@@ -3,7 +3,7 @@ import { Server } from 'socket.io';
 import { allowedOrigins } from '../config/env.js';
 import { db, redis } from '../config/database.js';
 import { accessCookie, identityFromAccess } from './auth.js';
-import { orderInclude } from './orders.js';
+import { customerOrderJson, orderInclude } from './orders.js';
 import { jsonValue } from '../utils/serialize.js';
 import { notificationDto } from './notifications.js';
 
@@ -58,7 +58,7 @@ async function subscribeDeveloperEvents() {
         const event = JSON.parse(message) as { userId?: string; orderId?: string; notificationIds?: string[]; notification?: { id?: string } };
         if (!event.userId || !event.orderId) return;
         const order = await db.order.findFirst({ where: { id: event.orderId, userId: event.userId }, include: orderInclude });
-        if (order) { ioEvent([`user:${event.userId}`, `order:${order.id}`], 'order:updated', jsonValue(order)); ioEvent(`user:${event.userId}`, 'payment:updated', { orderId: order.id, payment: jsonValue(order.payment) }); }
+        if (order) { ioEvent([`user:${event.userId}`, `order:${order.id}`], 'order:updated', customerOrderJson(order)); ioEvent(`user:${event.userId}`, 'payment:updated', { orderId: order.id, payment: jsonValue(order.payment) }); }
         const ids = event.notificationIds ?? (event.notification?.id ? [event.notification.id] : []);
         if (ids.length) {
           const [notices, settings] = await Promise.all([db.notification.findMany({ where: { id: { in: ids }, userId: event.userId }, orderBy: { createdAt: 'asc' } }), db.userSettings.findUnique({ where: { userId: event.userId } })]);

@@ -7,7 +7,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/security.js';
 import { assert } from '../utils/errors.js';
 import { jsonValue } from '../utils/serialize.js';
-import { activeStatuses, cartSchema, orderInclude, quoteCart } from '../services/orders.js';
+import { activeStatuses, cartSchema, customerOrderJson, orderInclude, quoteCart } from '../services/orders.js';
 import { ioEvent } from '../services/realtime.js';
 import { phoneSchema } from '../utils/validators.js';
 import { paginationSchema, pageMetadata } from '../utils/pagination.js';
@@ -23,13 +23,13 @@ orderRouter.get('/', async (req, res) => {
     db.order.findMany({ where, include: orderInclude, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: (page - 1) * pageSize, take: pageSize }),
     db.order.count({ where }),
   ]);
-  res.json({ data: jsonValue(orders), pagination: pageMetadata(page, pageSize, total) });
+  res.json({ data: orders.map(customerOrderJson), pagination: pageMetadata(page, pageSize, total) });
 });
 orderRouter.post('/quote', async (req, res) => { res.json({ data: jsonValue(await quoteCart(cartSchema.parse(req.body))) }); });
 orderRouter.get('/:id', async (req, res) => {
   const order = await db.order.findFirst({ where: { id: req.params.id as string, userId: req.user!.id }, include: orderInclude });
   assert(order, 404, 'NOT_FOUND', 'Заказ не найден');
-  res.json({ data: jsonValue(order) });
+  res.json({ data: customerOrderJson(order) });
 });
 const createOrderSchema = z.object({
   items: cartSchema.shape.items,
@@ -67,7 +67,7 @@ orderRouter.post('/', rateLimit('orders', 20, 900), async (req, res) => {
     const notification = await tx.notification.create({ data: { userId, type: 'ORDER_CREATED', title: 'Заказ создан', body: `${quote.restaurant.name} · ожидает принятия`, link: `/orders`, metadata: { orderId: order.id, restaurantName: quote.restaurant.name, status: order.status } } });
     return { order, notification, language: user.settings?.language };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-  ioEvent(`user:${userId}`, 'order:updated', jsonValue(result.order));
+  ioEvent(`user:${userId}`, 'order:updated', customerOrderJson(result.order));
   ioEvent(`user:${userId}`, 'notification', notificationDto(result.notification, result.language));
-  res.status(201).json({ data: jsonValue(result.order) });
+  res.status(201).json({ data: customerOrderJson(result.order) });
 });

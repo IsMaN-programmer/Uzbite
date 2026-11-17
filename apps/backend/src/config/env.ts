@@ -15,6 +15,11 @@ const schema = z.object({
   DELIVERY_ROAD_FACTOR: z.coerce.number().min(1).max(3).default(1.35),
   DELIVERY_PICKUP_MINUTES: z.coerce.number().min(0).max(60).default(5),
   DELIVERY_ESTIMATE_MARGIN_MINUTES: z.coerce.number().min(5).max(60).default(10),
+  // Server time is the source of truth for every courier offer deadline.
+  DELIVERY_OFFER_TTL_SECONDS: z.coerce.number().int().min(15).max(1800).default(120),
+  DELIVERY_SEARCH_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).default(300),
+  DELIVERY_HANDOFF_MAX_ATTEMPTS: z.coerce.number().int().min(3).max(10).default(5),
+  COURIER_INVITATION_TTL_HOURS: z.coerce.number().int().min(1).max(168).default(48),
   S3_ENDPOINT: z.string().optional(), S3_REGION: z.string().default('us-east-1'),
   S3_BUCKET: z.string().optional(), S3_PRIVATE_BUCKET: z.string().optional(), S3_ACCESS_KEY_ID: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(), CDN_BASE_URL: z.string().optional(),

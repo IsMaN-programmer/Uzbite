@@ -44,6 +44,82 @@ enum UploadPurpose {
   RECEIPT
 }
 
+/// Platform admission. Own-restaurant work is vouched for by an active affiliation;
+/// free UzBite deliveries require APPROVED. SUSPENDED blocks every mode.
+enum CourierApprovalStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+}
+
+enum CourierWorkMode {
+  RESTAURANT
+  FREELANCE
+}
+
+enum AffiliationStatus {
+  ACTIVE
+  ENDED
+}
+
+enum CourierInvitationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  REVOKED
+}
+
+enum DeliveryMode {
+  RESTAURANT_COURIER
+  UZBITE_COURIER
+}
+
+enum DeliveryStatus {
+  NOT_REQUESTED
+  SEARCHING
+  OFFERED
+  ASSIGNED
+  READY_FOR_PICKUP
+  PICKED_UP
+  ON_THE_WAY
+  DELIVERED
+  FAILED
+  CANCELLED
+}
+
+enum DeliveryOfferStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  WITHDRAWN
+  TAKEN
+}
+
+enum CashCollectionStatus {
+  NOT_APPLICABLE
+  PENDING
+  COLLECTED
+  SETTLED
+}
+
+enum CourierRewardStatus {
+  NONE
+  ACCRUED
+  CONFIRMED
+  PAID
+}
+
+enum DeliveryIssueType {
+  CANCELLATION_REQUEST
+  HANDOFF_CODE_UNAVAILABLE
+}
+
+enum DeliveryIssueStatus {
+  OPEN
+  RESOLVED
+}
+
 model User {
   id                String         @id @default(cuid())
   email             String?        @unique
@@ -71,6 +147,8 @@ model User {
   notifications     Notification[]
   uploads           Upload[]
   sessions          Session[]
+  courierProfile    CourierProfile?
+  restaurantStaff   RestaurantStaff?
 
   @@index([deliveryAddressId])
 }
@@ -134,14 +212,21 @@ model Restaurant {
   paymentDetails      String?
   paymentQrUrl        String?
   paymentInstructions String?
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  /// Courier matching uses the configured city/zone, not live courier GPS.
+  city                String                         @default("tashkent")
+  serviceZone         String?
+  createdAt           DateTime                       @default(now())
+  updatedAt           DateTime                       @updatedAt
   categories          RestaurantCategory[]
   dishes              Dish[]
   posts               Post[]
   follows             Follow[]
   reviews             Review[]
   orders              Order[]
+  staff               RestaurantStaff[]
+  courierAffiliations RestaurantCourierAffiliation[]
+  courierInvitations  CourierInvitation[]
+  deliveries          Delivery[]
 
   @@index([name])
 }
@@ -286,6 +371,7 @@ model Order {
   items             OrderItem[]
   payment           Payment?
   review            Review?
+  delivery          Delivery?
 
   @@index([userId, createdAt])
   @@index([restaurantId, status])
@@ -346,4 +432,183 @@ model Notification {
 
   @@index([userId, createdAt])
   @@index([userId, readAt])
+}
+
+/// Links a RESTAURANT-role account to the restaurant it operates (Windows app staff).
+model RestaurantStaff {
+  userId       String     @id
+  restaurantId String
+  createdAt    DateTime   @default(now())
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId])
+}
+
+model CourierProfile {
+  userId                String                         @id
+  firstName             String
+  lastName              String                         @default("")
+  approvalStatus        CourierApprovalStatus          @default(PENDING)
+  isTestAccount         Boolean                        @default(false)
+  workMode              CourierWorkMode?
+  isAvailable           Boolean                        @default(false)
+  city                  String                         @default("tashkent")
+  serviceZone           String?
+  onboardingStep        Int                            @default(1)
+  onboardingCompletedAt DateTime?
+  createdAt             DateTime                       @default(now())
+  updatedAt             DateTime                       @updatedAt
+  user                  User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  affiliations          RestaurantCourierAffiliation[]
+  invitations           CourierInvitation[]
+  offers                DeliveryOffer[]
+  deliveries            Delivery[]
+  issues                DeliveryIssue[]
+
+  @@index([workMode, isAvailable, approvalStatus, city])
+}
+
+/// Invitation codes are single-use and stored only as SHA-256 hashes.
+model CourierInvitation {
+  id           String                        @id @default(cuid())
+  restaurantId String
+  codeHash     String                        @unique
+  status       CourierInvitationStatus       @default(PENDING)
+  courierId    String?
+  createdById  String?
+  expiresAt    DateTime
+  claimedAt    DateTime?
+  respondedAt  DateTime?
+  revokedAt    DateTime?
+  createdAt    DateTime                      @default(now())
+  restaurant   Restaurant                    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  courier      CourierProfile?               @relation(fields: [courierId], references: [userId], onDelete: SetNull)
+  affiliation  RestaurantCourierAffiliation?
+
+  @@index([restaurantId, createdAt])
+  @@index([courierId, status])
+}
+
+model RestaurantCourierAffiliation {
+  id           String             @id @default(cuid())
+  restaurantId String
+  courierId    String
+  invitationId String?            @unique
+  status       AffiliationStatus  @default(ACTIVE)
+  invitedAt    DateTime
+  confirmedAt  DateTime           @default(now())
+  endedAt      DateTime?
+  endedBy      String?
+  restaurant   Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  courier      CourierProfile     @relation(fields: [courierId], references: [userId], onDelete: Restrict)
+  invitation   CourierInvitation? @relation(fields: [invitationId], references: [id], onDelete: SetNull)
+
+  @@index([courierId, status])
+  @@index([restaurantId, status])
+}
+
+/// One delivery per order. Order.status stays the customer-facing status;
+/// Delivery.status is the courier/dispatch lifecycle.
+model Delivery {
+  id                String               @id @default(cuid())
+  orderId           String               @unique
+  restaurantId      String
+  courierId         String?
+  mode              DeliveryMode?
+  status            DeliveryStatus       @default(NOT_REQUESTED)
+  version           Int                  @default(0)
+  reward            Decimal?             @db.Decimal(14, 2)
+  rewardStatus      CourierRewardStatus  @default(NONE)
+  pickupSnapshot    Json
+  dropoffSnapshot   Json
+  /// Shown only to the customer; the courier enters it at handoff.
+  handoffCode       String
+  handoffAttempts   Int                  @default(0)
+  cashAmount        Decimal              @default(0) @db.Decimal(14, 2)
+  cashStatus        CashCollectionStatus @default(NOT_APPLICABLE)
+  cashCollectedAt   DateTime?
+  cashCollectedById String?
+  cashSettledAt     DateTime?
+  searchStartedAt   DateTime?
+  searchExpiresAt   DateTime?
+  readyAt           DateTime?
+  assignedAt        DateTime?
+  pickedUpAt        DateTime?
+  startedAt         DateTime?
+  deliveredAt       DateTime?
+  completedVia      String?
+  closedAt          DateTime?
+  closeReason       String?
+  rewardConfirmedAt DateTime?
+  rewardPaidAt      DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  order             Order                @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  restaurant        Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  courier           CourierProfile?      @relation(fields: [courierId], references: [userId], onDelete: Restrict)
+  offers            DeliveryOffer[]
+  events            DeliveryEvent[]
+  issues            DeliveryIssue[]
+
+  @@index([restaurantId, status])
+  @@index([courierId, status])
+  @@index([status, searchExpiresAt])
+}
+
+/// An offer is not an assignment: only an ACCEPTED offer confirmed by the server assigns a courier.
+model DeliveryOffer {
+  id            String              @id @default(cuid())
+  deliveryId    String
+  courierId     String
+  mode          DeliveryMode
+  status        DeliveryOfferStatus @default(PENDING)
+  reward        Decimal?            @db.Decimal(14, 2)
+  expiresAt     DateTime
+  respondedAt   DateTime?
+  rejectReason  String?
+  releasedAt    DateTime?
+  releaseReason String?
+  createdAt     DateTime            @default(now())
+  delivery      Delivery            @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  courier       CourierProfile      @relation(fields: [courierId], references: [userId], onDelete: Restrict)
+
+  @@index([courierId, status, expiresAt])
+  @@index([deliveryId, status])
+}
+
+/// Append-only audit trail of every dispatch transition.
+model DeliveryEvent {
+  id         String          @id @default(cuid())
+  deliveryId String
+  type       String
+  fromStatus DeliveryStatus?
+  toStatus   DeliveryStatus?
+  actorId    String?
+  actorRole  String
+  offerId    String?
+  reason     String?
+  createdAt  DateTime        @default(now())
+  delivery   Delivery        @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryId, createdAt])
+}
+
+/// Controlled procedure for problems after pickup and for missing handoff codes.
+model DeliveryIssue {
+  id             String              @id @default(cuid())
+  deliveryId     String
+  courierId      String
+  type           DeliveryIssueType
+  status         DeliveryIssueStatus @default(OPEN)
+  reason         String
+  resolution     String?
+  resolutionNote String?
+  resolvedById   String?
+  resolvedAt     DateTime?
+  createdAt      DateTime            @default(now())
+  delivery       Delivery            @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  courier        CourierProfile      @relation(fields: [courierId], references: [userId], onDelete: Restrict)
+
+  @@index([deliveryId, status])
 }

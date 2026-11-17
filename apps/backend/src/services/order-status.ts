@@ -12,9 +12,18 @@ const paymentTransitions: Record<PaymentStatus, PaymentStatus[]> = {
   AWAITING_PAYMENT: ['PAID'], AWAITING_CONFIRMATION: ['PAID', 'REJECTED'], PAID: [], REJECTED: [],
 };
 
-/** Private service for the developer CLI; intentionally has no customer HTTP route. */
+/**
+ * Order/payment transition rules shared by the developer CLI, restaurant staff routes and courier
+ * dispatch. Customers have no route to this service. Pass a transaction to combine it with a
+ * delivery change atomically.
+ */
 export async function updateOrderState(orderId: string, nextStatus: OrderStatus, paymentStatus?: PaymentStatus, rejectionReason?: string) {
-  return db.$transaction(async tx => {
+  return db.$transaction(tx => applyOrderState(tx, orderId, nextStatus, paymentStatus, rejectionReason), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+export async function applyOrderState(tx: Prisma.TransactionClient, orderId: string, nextStatus: OrderStatus, paymentStatus?: PaymentStatus, rejectionReason?: string) {
+  {
+    // Row lock: concurrent restaurant/courier transitions on one order are applied one at a time.
+    await tx.$queryRaw`SELECT 1 FROM "Order" WHERE "id" = ${orderId} FOR UPDATE`;
     const existing = await tx.order.findUnique({ where: { id: orderId }, include: { payment: true } });
     assert(existing, 404, 'NOT_FOUND', 'Order not found');
     const statusChanged = nextStatus !== existing.status;
@@ -32,5 +41,5 @@ export async function updateOrderState(orderId: string, nextStatus: OrderStatus,
     if (statusChanged) notifications.push(await tx.notification.create({ data: { userId: existing.userId, type: 'ORDER_STATUS', title: 'Статус заказа обновлён', body: `${existing.restaurantName}: ${nextStatus}`, link: '/orders', metadata: { orderId, restaurantName: existing.restaurantName, status: nextStatus } } }));
     if (paymentChanged) notifications.push(await tx.notification.create({ data: { userId: existing.userId, type: 'PAYMENT_STATUS', title: 'Статус оплаты обновлён', body: existing.restaurantName, link: '/orders', metadata: { orderId, restaurantName: existing.restaurantName, paymentStatus: paymentStatus! } } }));
     return { order, notifications };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
 }
