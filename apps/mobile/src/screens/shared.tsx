@@ -53,13 +53,9 @@ export function ConnectionBanner() {
 
 export function PermissionNotice({ account }: { account: CourierAccount }) {
   const { t } = usePrefs();
-  const { permissions, workMode } = account.profile;
-  if (permissions.reason === 'SUSPENDED') return <Banner tone="danger" icon="shield" text={t('permSUSPENDED')} />;
-  // No restaurant link and no UzBite approval yet: no warning, the courier simply waits.
-  if (permissions.reason) return null;
-  if (workMode === 'RESTAURANT' && !permissions.restaurantMode) return <Banner tone="warning" text={t('permRestaurant')} />;
-  if (workMode === 'FREELANCE' && !permissions.freelanceMode) return <Banner tone="warning" text={t('permFreelance')} />;
-  return null;
+  const { permissions } = account.profile;
+  // Only a blocked account is announced. A missing restaurant link or UzBite approval shows no warning.
+  return permissions.reason === 'SUSPENDED' ? <Banner tone="danger" icon="shield" text={t('permSUSPENDED')} /> : null;
 }
 
 /** Restaurant invitation: enter the code, see which restaurant it is, then accept or decline. */

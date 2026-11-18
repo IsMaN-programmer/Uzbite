@@ -17,6 +17,11 @@ export function useActiveDelivery() {
   const { realtime } = useConnectivity();
   return useQuery({ queryKey: ['active'], queryFn: courierApi.activeDelivery, refetchInterval: fallbackInterval(realtime, 15000) });
 }
+/** Updated by `courier:map_updated` and offer events; polled only while the live socket is down. */
+export function useCourierMap() {
+  const { realtime } = useConnectivity();
+  return useQuery({ queryKey: ['map'], queryFn: courierApi.map, refetchInterval: fallbackInterval(realtime, 15000) });
+}
 export function useEarnings() {
   return useQuery({ queryKey: ['earnings'], queryFn: courierApi.earnings });
 }

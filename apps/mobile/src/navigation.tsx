@@ -14,12 +14,13 @@ import { OnboardingScreen } from './screens/OnboardingScreen';
 import { HomeScreen } from './screens/HomeScreen';
 import { OffersScreen } from './screens/OffersScreen';
 import { DeliveryScreen } from './screens/DeliveryScreen';
+import { MapScreen } from './screens/MapScreen';
 import { EarningsScreen, HistoryScreen } from './screens/HistoryScreens';
 import { AffiliationsScreen, NotificationsScreen, PersonalScreen, ProfileScreen, ServiceAreaScreen } from './screens/ProfileScreens';
 
 export type RootStackParams = {
   Login: undefined; Register: undefined; Server: undefined; Onboarding: undefined;
-  Tabs: NavigatorScreenParams<TabParams> | undefined; Delivery: { id: string }; Notifications: undefined; Earnings: undefined; Affiliations: undefined; ServiceArea: undefined; Personal: undefined;
+  Tabs: NavigatorScreenParams<TabParams> | undefined; Delivery: { id: string }; Map: undefined; Notifications: undefined; Earnings: undefined; Affiliations: undefined; ServiceArea: undefined; Personal: undefined;
 };
 export type TabParams = { Home: undefined; Offers: undefined; History: undefined; Profile: undefined };
 const Stack = createNativeStackNavigator<RootStackParams>();
@@ -68,6 +69,7 @@ function SignedIn() {
         <>
           <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false, title: t('appName') }} />
           <Stack.Screen name="Delivery" component={DeliveryScreen} options={{ title: '' }} />
+          <Stack.Screen name="Map" component={MapScreen} options={{ title: t('mapTitle') }} />
           <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: t('notifTitle') }} />
           <Stack.Screen name="Earnings" component={EarningsScreen} options={{ title: t('earningsTitle') }} />
           <Stack.Screen name="Affiliations" component={AffiliationsScreen} options={{ title: t('restaurants') }} />

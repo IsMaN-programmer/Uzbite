@@ -8,7 +8,7 @@ import { accessToken, refreshSession } from './api/client';
 
 /**
  * Socket.IO with the courier's Bearer token. The server puts the socket in courier:{id} and
- * user:{id}. Events are only hints: each one makes the app re-read REST, and so does every
+ * user:{id}, and on `courier-map:join` in the map room of the courier's city. Events are only hints: each one makes the app re-read REST, and so does every
  * (re)connection — nothing is assumed from a payload.
  */
 type Connectivity = { online: boolean; realtime: boolean };
@@ -16,10 +16,11 @@ const RealtimeContext = createContext<Connectivity>({ online: true, realtime: fa
 
 const queriesFor = (event: DeliverySocketEvent): string[][] => {
   if (event === 'notification:created') return [['notifications']];
-  if (event === 'courier:profile_updated') return [['me']];
-  if (event === 'courier:affiliation_updated') return [['me'], ['affiliations'], ['invitations']];
-  if (event.startsWith('delivery:offer_')) return [['offers'], ['active'], ['me']];
-  return [['active'], ['delivery'], ['offers'], ['history'], ['earnings'], ['me']];
+  if (event === 'courier:map_updated') return [['map']];
+  if (event === 'courier:profile_updated') return [['me'], ['map']];
+  if (event === 'courier:affiliation_updated') return [['me'], ['affiliations'], ['invitations'], ['map']];
+  if (event.startsWith('delivery:offer_')) return [['offers'], ['active'], ['me'], ['map']];
+  return [['active'], ['delivery'], ['offers'], ['history'], ['earnings'], ['me'], ['map']];
 };
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
@@ -44,7 +45,11 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       retry = setTimeout(() => { if (!stopped && !socket.connected) socket.connect(); }, backoff);
       backoff = Math.min(backoff * 2, 30000);
     };
-    socket.on('connect', () => { backoff = 2000; setRealtime(true); void queryClient.invalidateQueries(); });
+    // The map room of the courier's city; the server picks the city and refuses non-admitted couriers.
+    const joinMap = () => { socket.emit('courier-map:join', () => {}); };
+    socket.on('connect', () => { backoff = 2000; setRealtime(true); joinMap(); void queryClient.invalidateQueries(); });
+    // City, mode or admission may have changed: ask again (the server moves or removes the socket).
+    socket.on('courier:profile_updated', joinMap);
     socket.on('disconnect', reason => { setRealtime(false); if (reason === 'io server disconnect') void reconnectWithFreshToken(); });
     socket.on('connect_error', error => { setRealtime(false); if (error.message === 'Unauthorized') void reconnectWithFreshToken(); });
     for (const event of DELIVERY_SOCKET_EVENTS) {

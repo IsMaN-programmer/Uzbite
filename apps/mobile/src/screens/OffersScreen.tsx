@@ -8,7 +8,7 @@ import { AppError, asAppError } from '../api/client';
 import { courierApi } from '../api/courier';
 import { usePrefs } from '../prefs';
 import { useConnectivity } from '../realtime';
-import { useAccount, useNow, useOffers } from '../hooks';
+import { useNow, useOffers } from '../hooks';
 import { countdown, money, zoneName } from '../lib/format';
 import { Icon } from '../ui/Icon';
 import { AppText, Badge, Banner, Button, Card, ConfirmDialog, EmptyState, QueryState, Screen } from '../ui/kit';
@@ -24,7 +24,6 @@ export function OffersScreen() {
   const { t, colors, language, errorText } = usePrefs();
   const { online, realtime } = useConnectivity();
   const queryClient = useQueryClient();
-  const account = useAccount();
   const offers = useOffers();
   const now = useNow();
   const [pending, setPending] = useState<Record<string, Pending>>({});
@@ -85,7 +84,7 @@ export function OffersScreen() {
       <AppText variant="title">{t('offersTitle')}</AppText>
       <ConnectionBanner />
       <QueryState loading={offers.isPending} error={offers.isError && !offers.data ? offers.error : null} onRetry={() => void offers.refetch()}>
-        {!items.length ? <EmptyState icon="orders" text={account.data?.profile.isAvailable ? t('homeNoOffers') : t('offersEmpty')} /> : null}
+        {!items.length ? <EmptyState icon="orders" text={t('homeNoOffers')} /> : null}
         {items.map(offer => {
           const secondsLeft = Math.floor((Date.parse(offer.expiresAt) - (now + offset)) / 1000);
           const expired = secondsLeft <= 0;

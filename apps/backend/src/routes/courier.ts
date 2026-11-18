@@ -11,6 +11,7 @@ import { createAppSession, refreshAppSession, revokeAppSession } from '../servic
 import { disconnectSession } from '../services/realtime.js';
 import { courierAccount, courierEarnings, courierHistory, setCourierFacePhoto, setCourierPassport, updateOnboarding } from '../services/courier-account.js';
 import { acceptInvitation, claimInvitation, courierAffiliation, listCourierAffiliations, listCourierInvitations, rejectInvitation } from '../services/affiliations.js';
+import { courierMap } from '../services/courier-map.js';
 import {
   acceptOffer, completeDelivery, confirmCashCollected, confirmPickup, endAffiliation, getActiveCourierDelivery, getCourierDelivery, getCourierOffer,
   listCourierOffers, rejectOffer, reportHandoffProblem, requestCourierCancellation, setCourierAvailability, setCourierServiceArea, setCourierWorkMode, startDelivery,
@@ -157,6 +158,8 @@ courierRouter.get('/delivery-offers', async (req, res) => {
   const { serverTime, items } = await listCourierOffers(me(req));
   res.json({ data: items, serverTime });
 });
+/** Restaurants waiting for a courier now: free searches of the courier's city and personal offers. */
+courierRouter.get('/map', async (req, res) => { res.json({ data: await courierMap(me(req)) }); });
 courierRouter.get('/delivery-offers/:id', async (req, res) => { res.json({ data: await getCourierOffer(me(req), routeId(req)), serverTime: new Date().toISOString() }); });
 courierRouter.post('/delivery-offers/:id/accept', actions, async (req, res) => { res.json({ data: await acceptOffer(me(req), routeId(req)) }); });
 courierRouter.post('/delivery-offers/:id/reject', actions, async (req, res) => {

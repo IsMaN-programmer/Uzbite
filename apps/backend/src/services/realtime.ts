@@ -7,6 +7,7 @@ import { customerOrderJson, orderInclude } from './orders.js';
 import { ACTIVE_DELIVERY } from './dispatch-dto.js';
 import { jsonValue } from '../utils/serialize.js';
 import { notificationDto } from './notifications.js';
+import { courierMapRoom, freeSearchCity } from './courier-map.js';
 
 /**
  * Socket.IO for the customer website (HttpOnly cookie) and the native apps (Bearer token in
@@ -16,6 +17,7 @@ import { notificationDto } from './notifications.js';
  *   restaurant:{id}  the staff member's own restaurant, resolved from the account
  *   order:{id}       only the customer who owns the order (it carries the handoff code)
  *   delivery:{id}    the restaurant of the delivery or its currently assigned courier
+ *   courier-map:{city} admitted free couriers of that city who asked for the map (`courier-map:join`)
  * Events are hints emitted after commit; clients re-read REST after every (re)connection.
  */
 let io: Server | undefined;
@@ -97,6 +99,21 @@ export function initRealtime(server: HttpServer) {
       } catch { respond(false); }
     });
     socket.on('delivery:leave', (deliveryId: unknown) => { if (validId(deliveryId)) void socket.leave(`delivery:${deliveryId}`); });
+    // The client sends no city: the server uses the courier's own city and re-checks admission on
+    // every join, so the app re-joins after a change of city, mode or approval.
+    const leaveMaps = (keep?: string) => { for (const room of socket.rooms) if (room.startsWith('courier-map:') && room !== keep) void socket.leave(room); };
+    socket.on('courier-map:join', async (...args: unknown[]) => {
+      const respond = replier(args[args.length - 1]);
+      if (user.role !== 'COURIER') { respond(false); return; }
+      try {
+        const profile = await db.courierProfile.findUnique({ where: { userId: user.id }, select: { workMode: true, approvalStatus: true, city: true, onboardingCompletedAt: true } });
+        const city = profile ? freeSearchCity(profile) : null;
+        if (!city || !await stillValid(socket)) { leaveMaps(); respond(false); return; }
+        leaveMaps(courierMapRoom(city));
+        await socket.join(courierMapRoom(city)); respond(true);
+      } catch { respond(false); }
+    });
+    socket.on('courier-map:leave', () => leaveMaps());
     socket.on('post:join', async (postId: unknown) => {
       if (!validId(postId)) return;
       try { if (await db.post.findUnique({ where: { id: postId }, select: { id: true } })) await socket.join(`post:${postId}`); } catch { /* REST remains source of truth. */ }

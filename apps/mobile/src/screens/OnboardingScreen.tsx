@@ -85,7 +85,7 @@ export function OnboardingScreen() {
         {(affiliations.data ?? []).filter(item => item.status === 'ACTIVE').map(item => <Banner key={item.id} tone="success" text={t('inviteLinked', { name: item.restaurant.name })} />)}
       </> : null}
       {step === 3 && profile.workMode === 'FREELANCE' ? <>
-        <Badge tone={profile.approvalStatus === 'APPROVED' ? 'success' : 'warning'} text={t(`approval${profile.approvalStatus}`)} />
+        {profile.approvalStatus === 'APPROVED' ? <Badge tone="success" text={t('approvalAPPROVED')} /> : null}
         <CityPicker value={city} onChange={setCity} />
       </> : null}
 

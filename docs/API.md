@@ -94,4 +94,28 @@ GET orders, profile/likes, profile/follows, notifications и posts/:id/comments 
 
 Закрытый CLI: npm run order:status -- ORDER_ID STATUS [PAYMENT_STATUS] [REJECTION_REASON]. PAYMENT_STATUS можно изменить без продвижения STATUS; REJECTED требует причину длиной3–500символов. Оплаченный/отклонённый платёж не переводится произвольно назад. CLI недоступен в production и не имеет публичного HTTP/Socket-аналога.
 
+## Карта курьера и сторона ресторана
+
+Курьер включает «Принимаю заказы» (`PATCH /api/courier/availability {available:true}`). Если сервер подтвердил доступность, приложение курьера открывает карту ресторанов. Правила допуска не менялись: «Свой ресторан» — после привязки по коду приглашения, «Свободные доставки» — после допуска (`npm run courier:approve -- <email>`).
+
+`GET /api/courier/map` → `CourierMap { city, restaurants: CourierMapRestaurant[] }` (типы в `packages/shared/src/courier.ts`). На карте рестораны, которые сейчас ждут курьера:
+
+- свободный поиск (`Delivery.status = SEARCHING`, срок поиска не истёк) в городе курьера — видят допущенные курьеры в режиме «Свободные доставки» с выбранным городом;
+- личное предложение этому курьеру (`DeliveryOffer.status = PENDING`) — так ресторан зовёт своего курьера.
+
+У ресторана: `id, name, logoUrl, addressText, latitude, longitude` (из `Restaurant`), `waitingOrders` — сколько заказов ждут курьера, `offerIds` — открытые предложения этому курьеру (принимаются как обычно, `POST /api/courier/delivery-offers/:id/accept`). Данных покупателя в ответе нет.
+
+Живое обновление. Клиент отправляет `courier-map:join` (без аргументов, ответ `{ok}`); сервер сам выбирает комнату `courier-map:<city>` по профилю курьера и отказывает недопущенным. После любого изменения доставки ресторана сервер шлёт в комнату города ресторана `courier:map_updated {restaurantId}` — это подсказка, клиент перечитывает `GET /api/courier/map`. `courier-map:leave` выходит из комнаты. Личные предложения, как и раньше, приходят в `courier:<id>`.
+
+Что делает сторона ресторана — новых методов не нужно, карта строится из существующего API:
+
+1. Принять заказ: `POST /api/restaurant/orders/:id/accept` (по желанию `start-preparing`).
+2. «Готов отдать заказ»: `POST /api/restaurant/orders/:id/delivery/search {reward?}` — ресторан появляется на карте свободных курьеров своего города и они получают предложение. Своему курьеру: `POST /api/restaurant/orders/:id/delivery/offer {courierId, reward?}`.
+3. Поиск закрывается, когда курьер принял заказ, ресторан вызвал `POST /api/restaurant/orders/:id/delivery/cancel {reason?}` или истёк `DELIVERY_SEARCH_TTL_SECONDS`. Во всех случаях ресторан пропадает с карты сам.
+4. Заказ готов к выдаче: `POST /api/restaurant/orders/:id/delivery/ready`.
+
+Точка на карте — `Restaurant.latitude/longitude`, город — `Restaurant.city` (код из `SERVICE_CITIES`): неверные координаты ресторана дадут неверную точку у курьера. Аккаунт сотрудника: `npm run restaurant:staff -- <slug> <email>`, вход `POST /api/restaurant/auth/login`, Bearer-токен; сокет с `auth: {token}` попадает в комнату `restaurant:<id>`.
+
+Ключ Яндекс Карт для приложения курьера: `EXPO_PUBLIC_YANDEX_MAPS_API_KEY` в `apps/mobile/.env` (ключ «JavaScript API и HTTP Геокодер» из кабинета разработчика Яндекса, см. `apps/mobile/.env.example`). Если у ключа ограничение по HTTP Referer, разрешите хост из `EXPO_PUBLIC_YANDEX_MAPS_REFERER` (по умолчанию `localhost`), а для браузерной версии — адрес, с которого она открыта. Без ключа экран показывает те же рестораны списком.
+
 Регистрация: `POST /auth/register {email,password,language?,theme?}`. Вход: `POST /auth/login {email,password}`. Почта обязательна и нормализуется в нижний регистр, никнейм не служит учётными данными для входа. При регистрации создаётся временный никнейм, который пользователь заменяет в настройках профиля; первая установка доступна сразу, последующие изменения — раз в 30 дней. В профиле name/username/nickname обозначают одно имя. Имя получателя заказа хранится отдельно в recipientName.

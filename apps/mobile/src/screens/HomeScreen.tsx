@@ -8,7 +8,7 @@ import { useConnectivity } from '../realtime';
 import { useAccount, useActiveDelivery, useEarnings, useOffers } from '../hooks';
 import { money } from '../lib/format';
 import { Icon } from '../ui/Icon';
-import { AppText, Badge, Banner, Card, Screen } from '../ui/kit';
+import { AppText, Badge, Banner, Button, Card, Screen } from '../ui/kit';
 import { Avatar, ConnectionBanner, PermissionNotice, StatusPill, useAction } from './shared';
 import type { RootStackParams } from '../navigation';
 
@@ -27,8 +27,11 @@ export function HomeScreen() {
   const refreshing = account.isFetching || active.isFetching || offers.isFetching || earnings.isFetching;
   const refresh = () => { void Promise.all([account.refetch(), active.refetch(), offers.refetch(), earnings.refetch()]); };
   const setAvailable = (value: boolean) => void toggle.run(async () => {
-    queryClient.setQueryData(['me'], await courierApi.setAvailability(value));
-    await queryClient.invalidateQueries({ queryKey: ['offers'] });
+    const next = await courierApi.setAvailability(value);
+    queryClient.setQueryData(['me'], next);
+    await Promise.all([queryClient.invalidateQueries({ queryKey: ['offers'] }), queryClient.invalidateQueries({ queryKey: ['map'] })]);
+    // Going online (confirmed by the server) opens the map of restaurants waiting for a courier.
+    if (value && next.profile.isAvailable) navigation.navigate('Map');
   });
   const canGoOnline = profile.workMode === 'RESTAURANT' ? profile.permissions.restaurantMode : profile.workMode === 'FREELANCE' ? profile.permissions.freelanceMode : false;
 
@@ -59,6 +62,7 @@ export function HomeScreen() {
         </View>
         {profile.availability === 'BUSY' ? <AppText variant="caption" muted>{t('homeBusy')}</AppText> : null}
         {toggle.error ? <Banner tone="danger" text={toggle.error} /> : null}
+        {profile.isAvailable ? <Button title={t('mapOpen')} icon="map" variant="secondary" onPress={() => navigation.navigate('Map')} /> : null}
       </Card>
 
       {active.data ? (

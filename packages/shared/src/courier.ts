@@ -178,6 +178,26 @@ export interface CourierEarnings {
   today: { completed: number; accrued: Money };
   withoutReward: number;
 }
+/**
+ * A restaurant on the courier map: it is waiting for a courier right now (GET /api/courier/map).
+ * It appears when the restaurant starts a free search for an order in the courier's city
+ * (POST /api/restaurant/orders/:id/delivery/search) or offers an order to this courier personally
+ * (POST /api/restaurant/orders/:id/delivery/offer), and disappears when the search or offer ends.
+ * The point is the restaurant's stored Restaurant.latitude/longitude. No customer data.
+ */
+export interface CourierMapRestaurant extends RestaurantBrief {
+  latitude: number;
+  longitude: number;
+  /** Orders of this restaurant waiting for a courier that this courier may see. */
+  waitingOrders: number;
+  /** Open offers to this courier from this restaurant; they are accepted on the offers screen. */
+  offerIds: string[];
+}
+/** `city` is the courier's work city (null until chosen); free searches are matched by it. */
+export interface CourierMap { city: string | null; restaurants: CourierMapRestaurant[] }
+/** Payload of `courier:map_updated`: something changed at this restaurant, re-read GET /api/courier/map. */
+export interface CourierMapHint { restaurantId: string }
+
 export interface CourierAffiliationDto { id: string; restaurant: RestaurantBrief; status: 'ACTIVE' | 'ENDED'; invitedAt: string; confirmedAt: string; endedAt: string | null }
 export interface CourierInvitationDto { id: string; restaurant: RestaurantBrief; status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'REVOKED' | 'EXPIRED'; expiresAt: string; createdAt: string }
 
@@ -190,6 +210,8 @@ export const DELIVERY_SOCKET_EVENTS = [
   'delivery:offer_created', 'delivery:offer_accepted', 'delivery:offer_rejected', 'delivery:offer_expired', 'delivery:offer_withdrawn', 'delivery:offer_taken',
   'delivery:courier_assigned', 'delivery:search_started', 'delivery:pickup_ready', 'delivery:picked_up', 'delivery:status_updated',
   'delivery:completed', 'delivery:cancelled', 'delivery:issue_updated', 'courier:profile_updated', 'courier:affiliation_updated', 'notification:created',
+  // Sent to the courier-map:{city} room joined with `courier-map:join` (payload CourierMapHint).
+  'courier:map_updated',
 ] as const;
 export type DeliverySocketEvent = typeof DELIVERY_SOCKET_EVENTS[number];
 /** Restaurant room only: new customer orders and changes of order or payment status. */
@@ -198,7 +220,9 @@ export type RestaurantSocketEvent = typeof RESTAURANT_SOCKET_EVENTS[number];
 /**
  * Client → server requests, each answered `{ ok }` by acknowledgement. `delivery:join` is allowed
  * for the delivery's restaurant and its currently assigned courier; `order:join` for its customer.
+ * `courier-map:join` (no payload) puts an admitted free courier into the map room of their own city
+ * (the server picks the city); `courier-map:leave` leaves it.
  */
-export const SOCKET_CLIENT_EVENTS = ['delivery:join', 'delivery:leave', 'order:join', 'post:join', 'post:leave'] as const;
+export const SOCKET_CLIENT_EVENTS = ['delivery:join', 'delivery:leave', 'order:join', 'post:join', 'post:leave', 'courier-map:join', 'courier-map:leave'] as const;
 /** Every delivery hint carries at least these fields; `version` grows with each change. */
 export interface DeliverySocketHint { deliveryId: string; orderId: string; status: DeliveryStatus; version: number }

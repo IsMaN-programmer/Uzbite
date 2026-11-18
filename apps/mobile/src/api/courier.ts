@@ -1,5 +1,5 @@
 import type {
-  AuthTokens, CourierAccount, CourierAffiliationDto, CourierDelivery, CourierEarnings, CourierHistoryItem, CourierInvitationDto, CourierOffer, CourierWorkMode, Language, Theme,
+  AuthTokens, CourierAccount, CourierAffiliationDto, CourierDelivery, CourierEarnings, CourierHistoryItem, CourierInvitationDto, CourierMap, CourierOffer, CourierWorkMode, Language, Theme,
 } from '@uzbite/shared';
 import { call, upload } from './client';
 
@@ -40,6 +40,8 @@ export const courierApi = {
   affiliations: () => data(call<CourierAffiliationDto[]>('get', '/courier/affiliations')),
   endAffiliation: (id: string) => data(call<CourierAffiliationDto>('post', `/courier/affiliations/${id}/end`)),
 
+  /** Restaurants waiting for a courier now (free searches of the courier's city and personal offers). */
+  map: () => data(call<CourierMap>('get', '/courier/map')),
   /** Offers come with the server clock so deadlines are measured in server time. */
   offers: async () => { const reply = await call<CourierOffer[]>('get', '/courier/delivery-offers'); return { items: reply.data, serverTime: reply.serverTime ?? new Date().toISOString(), receivedAt: Date.now() }; },
   offer: async (id: string) => { const reply = await call<CourierOffer>('get', `/courier/delivery-offers/${id}`); return { offer: reply.data, serverTime: reply.serverTime ?? new Date().toISOString() }; },

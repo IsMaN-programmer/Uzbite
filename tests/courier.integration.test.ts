@@ -5,7 +5,7 @@ import { execFile } from 'node:child_process';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { io, type Socket } from 'socket.io-client';
-import type { AuthTokens, CourierAccount, CourierDelivery, CourierEarnings, CourierHistoryItem, CourierOffer, DeliverySocketHint } from '@uzbite/shared';
+import type { AuthTokens, CourierAccount, CourierDelivery, CourierEarnings, CourierHistoryItem, CourierMap, CourierMapHint, CourierOffer, DeliverySocketHint } from '@uzbite/shared';
 import { db } from '../apps/backend/src/config/database.js';
 import { deletePrivateObject } from '../apps/backend/src/services/storage.js';
 
@@ -472,5 +472,56 @@ test('Socket.IO: Bearer auth, server-assigned rooms, foreign rooms refused, even
     assert.equal(await dropped, 'io server disconnect', 'Logout closes the session socket');
   } finally {
     for (const socket of sockets) socket.disconnect();
+  }
+});
+
+test('Courier map: a free search puts the restaurant on the map of admitted couriers of its city, with a live hint', async () => {
+  const restaurant = await db.restaurant.findUniqueOrThrow({ where: { slug: 'osh-olov' } });
+  const { client: courier } = await registerCourier('map_free');
+  const { client: waiting } = await registerCourier('map_waiting');
+  await onboard(courier, 'FREELANCE');
+  await onboard(waiting, 'FREELANCE');
+  assert.match(await cli('courier-approve.ts', emailOf('map_free'), '--test'), /APPROVED \(test account\)/);
+  assert.equal((await courier.request<CourierAccount>('PATCH', '/courier/availability', { available: true })).data.profile.availability, 'AVAILABLE');
+  const mapSocket = connect({ token: courier.tokens!.accessToken }), waitingSocket = connect({ token: waiting.tokens!.accessToken });
+  let orderId = '';
+  try {
+    assert.equal(await opened(mapSocket), true);
+    assert.equal(await opened(waitingSocket), true);
+    assert.equal(await joins(mapSocket, 'courier-map:join', ''), true, 'An admitted free courier follows the map of their city');
+    assert.equal(await joins(waitingSocket, 'courier-map:join', ''), false, 'No map room without admission');
+    let waitingHeard = false;
+    waitingSocket.on('courier:map_updated', () => { waitingHeard = true; });
+
+    ({ orderId } = await acceptedOrder(osh, 'map_customer'));
+    const before = (await courier.request<CourierMap>('GET', '/courier/map')).data.restaurants.find(item => item.id === restaurant.id)?.waitingOrders ?? 0;
+    const hint = nextEvent<CourierMapHint>(mapSocket, 'courier:map_updated');
+    assert.equal((await osh.request<Json>('POST', `/restaurant/orders/${orderId}/delivery/search`, {})).data.status, 'SEARCHING');
+    assert.equal((await hint).restaurantId, restaurant.id, 'The city map room hears about the search after commit');
+
+    const reply = await courier.request<CourierMap>('GET', '/courier/map');
+    assert.equal(reply.status, 200, JSON.stringify(reply.error));
+    assert.equal(reply.data.city, 'tashkent');
+    const pin = reply.data.restaurants.find(item => item.id === restaurant.id);
+    assert.ok(pin, 'The searching restaurant is on the map');
+    assert.equal(pin.waitingOrders, before + 1);
+    assert.deepEqual([pin.latitude, pin.longitude, pin.name], [restaurant.latitude, restaurant.longitude, restaurant.name], 'The point is the stored restaurant location');
+    const offer = (await courier.request<CourierOffer[]>('GET', '/courier/delivery-offers')).data.find(item => item.order.number === orderId.slice(-8).toUpperCase());
+    assert.ok(offer && pin.offerIds.includes(offer.id), 'The map links to the courier’s own open offer');
+    assert.equal(JSON.stringify(reply.data).includes('+998907654321') || JSON.stringify(reply.data).includes('Courier API test address'), false, 'No customer data on the map');
+    assert.deepEqual((await waiting.request<CourierMap>('GET', '/courier/map')).data.restaurants, [], 'A courier without admission sees no free searches');
+
+    const gone = nextEvent<CourierMapHint>(mapSocket, 'courier:map_updated');
+    assert.equal((await courier.request('POST', `/courier/delivery-offers/${offer.id}/accept`)).status, 200);
+    await gone;
+    const after = (await courier.request<CourierMap>('GET', '/courier/map')).data.restaurants.find(item => item.id === restaurant.id);
+    assert.equal(after?.waitingOrders ?? 0, before, 'An accepted order leaves the map');
+    assert.equal(after?.offerIds.includes(offer.id) ?? false, false);
+    await pause(300);
+    assert.equal(waitingHeard, false, 'Couriers outside the map room hear nothing');
+  } finally {
+    if (orderId) await osh.request('POST', `/restaurant/orders/${orderId}/delivery/cancel`, { reason: 'Тест карты: снимаем назначение' });
+    await courier.request('PATCH', '/courier/availability', { available: false });
+    mapSocket.disconnect(); waitingSocket.disconnect();
   }
 });

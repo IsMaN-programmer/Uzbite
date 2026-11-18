@@ -95,6 +95,8 @@ function signal(out: Outbox, event: string, delivery: DeliveryRef, extra: Record
   const rooms = [`restaurant:${delivery.restaurantId}`, `delivery:${delivery.id}`];
   for (const courierId of new Set([delivery.courierId, alsoCourierId])) if (courierId) rooms.push(`courier:${courierId}`);
   out.emit(rooms, event, { deliveryId: delivery.id, orderId: delivery.orderId, status: delivery.status, version: delivery.version, ...extra });
+  // Searches start and end only through delivery changes, so the courier map follows every one of them.
+  out.courierMap(delivery.restaurantId);
 }
 function queueOrderUpdate(out: Outbox, result: { order: { id: string }; notifications: { id: string }[] }) {
   out.customerOrder(result.order.id);
