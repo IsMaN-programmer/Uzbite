@@ -8,7 +8,7 @@ import { usePrefs } from '../prefs';
 import { useEarnings } from '../hooks';
 import { dateTime, money } from '../lib/format';
 import { Icon } from '../ui/Icon';
-import { AppText, Badge, Banner, Button, Card, EmptyState, QueryState, Screen, Segmented } from '../ui/kit';
+import { AppText, Badge, Banner, Button, Card, Dropdown, EmptyState, QueryState, Screen } from '../ui/kit';
 import type { RootStackParams } from '../navigation';
 
 /** Accepted deliveries with their outcome. No customer name, phone or address is kept here. */
@@ -25,14 +25,14 @@ export function HistoryScreen() {
   const tone = { DELIVERED: 'success', CANCELLED: 'danger', FAILED: 'danger', IN_PROGRESS: 'accent' } as const;
   return (
     <Screen refreshing={history.isRefetching} onRefresh={() => void history.refetch()}>
+      {/* All deliveries by default; the filter is a menu on the right of the title. */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <AppText variant="title" style={{ flex: 1 }}>{t('historyTitle')}</AppText>
-        <Button title={t('earningsTitle')} icon="wallet" variant="secondary" onPress={() => navigation.navigate('Earnings')} />
+        <Dropdown label={t('historyFilter')} value={filter} onChange={setFilter} options={[
+          { value: 'all', label: t('fAll') }, { value: 'completed', label: t('fCompleted') }, { value: 'cancelled', label: t('fCancelled') },
+          { value: 'restaurant', label: t('fRestaurant') }, { value: 'freelance', label: t('fFreelance') },
+        ]} />
       </View>
-      <Segmented value={filter} onChange={setFilter} options={[
-        { value: 'all', label: t('fAll') }, { value: 'completed', label: t('fCompleted') }, { value: 'cancelled', label: t('fCancelled') },
-        { value: 'restaurant', label: t('fRestaurant') }, { value: 'freelance', label: t('fFreelance') },
-      ]} />
       <QueryState loading={history.isPending} error={history.isError && !history.data ? history.error : null} onRetry={() => void history.refetch()}>
         {!items.length ? <EmptyState icon="clock" text={t('historyEmpty')} /> : null}
         {items.map(item => (

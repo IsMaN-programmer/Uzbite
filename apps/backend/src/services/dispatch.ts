@@ -3,6 +3,8 @@ import { Prisma, type CourierApprovalStatus, type CourierProfile, type CourierWo
 import { db } from '../config/database.js';
 import { env } from '../config/env.js';
 import { ApiError, assert } from '../utils/errors.js';
+import type { CourierNearbyOrder, CourierNearbyOrders } from '@uzbite/shared';
+import { greatCircleKm } from '../utils/delivery.js';
 import { applyOrderState } from './order-status.js';
 import { Outbox } from './outbox.js';
 import { dispatchNoticeText } from './notifications.js';
@@ -138,9 +140,14 @@ export function courierPermissions(profile: Pick<CourierProfile, 'approvalStatus
   const restaurantMode = activeAffiliations > 0, freelanceMode = profile.approvalStatus === 'APPROVED';
   return { restaurantMode, freelanceMode, reason: restaurantMode || freelanceMode ? null : 'NO_AFFILIATION_OR_APPROVAL' as string | null };
 }
-/** BUSY comes from a real accepted delivery; the client can never set it. */
-export function courierAvailability(profile: Pick<CourierProfile, 'isAvailable'>, activeDeliveryId: string | null) {
-  return activeDeliveryId ? 'BUSY' as const : profile.isAvailable ? 'AVAILABLE' as const : 'UNAVAILABLE' as const;
+type Readiness = Pick<CourierProfile, 'approvalStatus' | 'onboardingCompletedAt' | 'workMode' | 'city'>;
+/**
+ * There is no "accepting orders" switch: a courier permitted for the current mode is always on
+ * duty (AVAILABLE) unless an accepted delivery makes them BUSY. Nobody can set either state by hand.
+ */
+export function courierAvailability(profile: Readiness, activeAffiliations: number, activeDeliveryId: string | null) {
+  if (activeDeliveryId) return 'BUSY' as const;
+  return readinessError(profile, activeAffiliations) ? 'UNAVAILABLE' as const : 'AVAILABLE' as const;
 }
 type CourierState = CourierProfile & { affiliatedRestaurantIds: string[]; activeDeliveryId: string | null };
 async function readCourier(tx: Tx, courierId: string): Promise<CourierState | null> {
@@ -163,7 +170,6 @@ function eligibilityError(courier: CourierState | null, mode: DeliveryMode, rest
     if (courier.workMode !== 'FREELANCE') return new ApiError(409, 'WRONG_WORK_MODE', 'Курьер работает не в режиме «Свободные доставки»');
     if (!courier.city || courier.city !== restaurant.city) return new ApiError(409, 'OUT_OF_AREA', 'Заказ находится в другом городе');
   }
-  if (!courier.isAvailable) return new ApiError(409, 'COURIER_UNAVAILABLE', 'Курьер сейчас недоступен');
   if (courier.activeDeliveryId) return new ApiError(409, 'COURIER_BUSY', 'У курьера уже есть активная доставка');
   return null;
 }
@@ -172,7 +178,7 @@ async function freeCandidates(tx: Tx, restaurant: { city: string }, deliveryId: 
   const rows = await tx.courierProfile.findMany({
     where: {
       ...(among ? { userId: { in: among } } : {}),
-      approvalStatus: 'APPROVED', workMode: 'FREELANCE', isAvailable: true, onboardingCompletedAt: { not: null },
+      approvalStatus: 'APPROVED', workMode: 'FREELANCE', onboardingCompletedAt: { not: null },
       city: restaurant.city,
       deliveries: { none: { status: { in: ACTIVE_DELIVERY } } },
       // A courier who already dropped this delivery is not offered it again.
@@ -370,10 +376,13 @@ export async function startFreeSearch(restaurantId: string, orderId: string, inp
   });
 }
 
-/** A free courier who becomes available (or changes city) during open searches receives their offers too. */
+/**
+ * A free courier who becomes eligible during open searches (approved, onboarding finished, switched
+ * to free deliveries or to another city) receives those offers too.
+ */
 export async function matchCourierToOpenSearches(courierId: string) {
   const courier = await db.courierProfile.findUnique({ where: { userId: courierId } });
-  if (!courier?.city || courier.workMode !== 'FREELANCE' || !courier.isAvailable || courier.approvalStatus !== 'APPROVED' || !courier.onboardingCompletedAt) return 0;
+  if (!courier?.city || courier.workMode !== 'FREELANCE' || courier.approvalStatus !== 'APPROVED' || !courier.onboardingCompletedAt) return 0;
   const searches = await db.delivery.findMany({
     where: { status: 'SEARCHING', searchExpiresAt: { gt: new Date() }, restaurant: { city: courier.city } },
     select: { id: true, orderId: true }, orderBy: { searchStartedAt: 'asc' }, take: 20,
@@ -463,6 +472,112 @@ export async function acceptOffer(courierId: string, offerId: string) {
     const context = { deliveryId: delivery.id, orderId: delivery.orderId, restaurantName: delivery.order.restaurantName };
     await notifyRestaurant(tx, out, delivery.restaurantId, 'COURIER_ASSIGNED', context, { courierName: courierName(courier) });
     await notifyCustomerAssigned(tx, out, delivery.order);
+    for (const loser of losers) out.courier(loser.courierId, 'delivery:offer_taken', { offerId: loser.id, deliveryId: delivery.id });
+    out.courier(courierId, 'delivery:offer_accepted', { offerId: offer.id, deliveryId: delivery.id });
+    signal(out, 'delivery:courier_assigned', assigned);
+    return courierDelivery(tx, delivery.id, courierId);
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// MVP: orders near the courier (5 km from the restaurant), taken by the first courier who taps
+// ---------------------------------------------------------------------------------------------
+
+export const NEARBY_RADIUS_KM = 5;
+/** A position older than this is not "current": the app reports every ~30 s while it is open. */
+const LOCATION_MAX_AGE_MS = 10 * 60_000;
+/** Any open order without a courier can be taken, even before the restaurant accepts it. */
+const TAKEABLE_ORDER: OrderStatus[] = ['PENDING_ACCEPTANCE', 'ACCEPTED', 'PREPARING'];
+const TAKEABLE_DELIVERY: DeliveryStatus[] = ['NOT_REQUESTED', 'SEARCHING', 'OFFERED'];
+const freshPosition = (courier: Pick<CourierProfile, 'latitude' | 'longitude' | 'locationAt'>) =>
+  courier.latitude !== null && courier.longitude !== null && courier.locationAt && Date.now() - courier.locationAt.getTime() <= LOCATION_MAX_AGE_MS
+    ? { latitude: courier.latitude, longitude: courier.longitude } : null;
+const roundKm = (km: number) => Math.round(km * 10) / 10;
+
+/** Open orders whose restaurant is within 5 km of the courier; own-restaurant couriers see their restaurants only. */
+export async function listNearbyOrders(courierId: string): Promise<CourierNearbyOrders> {
+  const courier = await readCourier(db, courierId);
+  assert(courier, 404, 'NOT_FOUND', 'Профиль курьера не найден');
+  const here = freshPosition(courier);
+  const empty = { items: [], located: Boolean(here), radiusKm: NEARBY_RADIUS_KM };
+  if (!here || courier.activeDeliveryId || readinessError(courier, courier.affiliatedRestaurantIds.length)) return empty;
+  const orders = await db.order.findMany({
+    where: {
+      status: { in: TAKEABLE_ORDER },
+      OR: [{ delivery: null }, { delivery: { courierId: null, status: { in: TAKEABLE_DELIVERY } } }],
+      ...(courier.workMode === 'RESTAURANT' ? { restaurantId: { in: courier.affiliatedRestaurantIds } } : {}),
+    },
+    include: { restaurant: { select: { id: true, name: true, logoUrl: true, addressText: true, latitude: true, longitude: true } }, items: { select: { quantity: true } }, payment: { select: { method: true } } },
+    orderBy: { createdAt: 'desc' }, take: 200,
+  });
+  const items = orders.flatMap((order): CourierNearbyOrder[] => {
+    const km = greatCircleKm(here, order.restaurant);
+    if (km === null || km > NEARBY_RADIUS_KM) return [];
+    return [{
+      orderId: order.id, number: orderNumber(order.id), status: order.status, createdAt: order.createdAt.toISOString(), restaurant: order.restaurant,
+      distanceKm: roundKm(km), itemCount: order.items.reduce((sum, item) => sum + item.quantity, 0), total: order.total.toNumber(),
+      paymentMethod: order.payment?.method ?? null, reward: order.deliveryFee.toNumber(),
+    }];
+  }).sort((a, b) => a.distanceKm - b.distanceKm);
+  return { items, located: true, radiusKm: NEARBY_RADIUS_KM };
+}
+
+/**
+ * «Взять заказ»: the first courier wins. Under the canonical locks (Order → Delivery → CourierProfile)
+ * the delivery is created if needed and claimed with a conditional update; a second courier gets
+ * OFFER_TAKEN. An ACCEPTED offer row is written so history and earnings work as for any delivery.
+ */
+export async function takeOrder(courierId: string, orderId: string) {
+  const actor: DispatchActor = { id: courierId, role: 'COURIER' };
+  const known = await db.order.findUnique({ where: { id: orderId }, select: { id: true, delivery: { select: { id: true } } } });
+  assert(known, 404, 'NOT_FOUND', 'Заказ не найден');
+  const pending = await pendingOffersOf(db, courierId);
+  return dispatchTx(async (tx, out) => {
+    await lockRows(tx, { orders: [orderId, ...pending.map(item => item.delivery.orderId)] });
+    await lockRows(tx, { deliveries: [known.delivery?.id, ...pending.map(item => item.deliveryId)] });
+    await lockRows(tx, { couriers: [courierId] });
+    await pendingOffersUnchanged(tx, courierId, pending);
+    const order = await tx.order.findUniqueOrThrow({ where: { id: orderId }, include: { restaurant: true, payment: true } });
+    // Every delivery writer locks the order first, so under this lock the delivery cannot change.
+    const existing = await tx.delivery.findUnique({ where: { orderId } });
+    if (existing?.courierId === courierId && ACTIVE_DELIVERY.includes(existing.status)) return courierDelivery(tx, existing.id, courierId);
+    if (existing?.courierId) throw closedOfferError('TAKEN');
+    if (!TAKEABLE_ORDER.includes(order.status) || (existing && !TAKEABLE_DELIVERY.includes(existing.status))) throw new ApiError(409, 'ORDER_UNAVAILABLE', 'Заказ больше недоступен');
+    const courier = await readCourier(tx, courierId);
+    assert(courier, 404, 'NOT_FOUND', 'Профиль курьера не найден');
+    const problem = readinessError(courier, courier.affiliatedRestaurantIds.length);
+    if (problem) throw problem;
+    if (courier.activeDeliveryId) throw new ApiError(409, 'COURIER_BUSY', 'У вас уже есть активная доставка');
+    if (courier.workMode === 'RESTAURANT' && !courier.affiliatedRestaurantIds.includes(order.restaurantId)) throw new ApiError(403, 'NOT_AFFILIATED', 'Это заказ другого ресторана');
+    const here = freshPosition(courier);
+    if (!here) throw new ApiError(409, 'LOCATION_REQUIRED', 'Разрешите доступ к геолокации, чтобы брать заказы рядом');
+    const km = greatCircleKm(here, order.restaurant);
+    if (km === null || km > NEARBY_RADIUS_KM) throw new ApiError(409, 'TOO_FAR', `Заказ дальше ${NEARBY_RADIUS_KM} км от вас`);
+
+    const delivery = existing ?? await ensureDelivery(tx, order, actor);
+    const mode: DeliveryMode = courier.workMode === 'RESTAURANT' ? 'RESTAURANT_COURIER' : 'UZBITE_COURIER';
+    const reward = delivery.reward ?? order.deliveryFee, at = new Date();
+    let claimed: Prisma.BatchPayload;
+    try {
+      claimed = await tx.delivery.updateMany({
+        where: { id: delivery.id, courierId: null, status: { in: TAKEABLE_DELIVERY } },
+        data: { courierId, status: delivery.readyAt ? 'READY_FOR_PICKUP' : 'ASSIGNED', mode, reward, assignedAt: at, version: nextVersion },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw new ApiError(409, 'COURIER_BUSY', 'У вас уже есть активная доставка');
+      throw error;
+    }
+    if (claimed.count !== 1) throw closedOfferError('TAKEN');
+    const offer = await tx.deliveryOffer.create({ data: { deliveryId: delivery.id, courierId, mode, reward, status: 'ACCEPTED', expiresAt: at, respondedAt: at } });
+    // Restaurant-started searches and personal offers for this order close for everyone else.
+    const losers = await tx.deliveryOffer.findMany({ where: { deliveryId: delivery.id, status: 'PENDING' }, select: { id: true, courierId: true } });
+    if (losers.length) await tx.deliveryOffer.updateMany({ where: { id: { in: losers.map(item => item.id) }, status: 'PENDING' }, data: { status: 'TAKEN' } });
+    await closeOffers(tx, out, await tx.deliveryOffer.findMany({ where: { courierId, status: 'PENDING', deliveryId: { not: delivery.id } } }), 'WITHDRAWN', 'COURIER_BUSY', actor);
+    const assigned = await tx.delivery.findUniqueOrThrow({ where: { id: delivery.id } });
+    await audit(tx, delivery.id, 'COURIER_ASSIGNED', actor, { from: delivery.status, to: assigned.status, offerId: offer.id, reason: `nearby ${roundKm(km)} km` });
+    const context = { deliveryId: delivery.id, orderId, restaurantName: order.restaurantName };
+    await notifyRestaurant(tx, out, order.restaurantId, 'COURIER_ASSIGNED', context, { courierName: courierName(courier) });
+    await notifyCustomerAssigned(tx, out, order);
     for (const loser of losers) out.courier(loser.courierId, 'delivery:offer_taken', { offerId: loser.id, deliveryId: delivery.id });
     out.courier(courierId, 'delivery:offer_accepted', { offerId: offer.id, deliveryId: delivery.id });
     signal(out, 'delivery:courier_assigned', assigned);
@@ -787,12 +902,12 @@ export async function advanceReward(restaurantId: string, deliveryId: string, to
 // Courier state: availability, work mode, area, affiliations, approval
 // ---------------------------------------------------------------------------------------------
 
-/** Why the courier cannot go online in the current mode, or null. The mode itself is only a preference. */
-function readinessError(courier: Pick<CourierState, 'approvalStatus' | 'onboardingCompletedAt' | 'workMode' | 'city' | 'affiliatedRestaurantIds'>): ApiError | null {
+/** Why the courier does not receive orders in the current mode, or null (then they are on duty). */
+function readinessError(courier: Readiness, activeAffiliations: number): ApiError | null {
   if (courier.approvalStatus === 'SUSPENDED') return new ApiError(403, 'COURIER_SUSPENDED', 'Аккаунт курьера заблокирован');
   if (!courier.onboardingCompletedAt) return new ApiError(409, 'ONBOARDING_INCOMPLETE', 'Сначала завершите регистрацию');
   if (!courier.workMode) return new ApiError(409, 'WORK_MODE_REQUIRED', 'Выберите режим работы');
-  const permissions = courierPermissions(courier, courier.affiliatedRestaurantIds.length);
+  const permissions = courierPermissions(courier, activeAffiliations);
   if (courier.workMode === 'RESTAURANT') return permissions.restaurantMode ? null : new ApiError(403, 'MODE_NOT_ALLOWED', 'Режим «Свой ресторан» доступен после привязки к ресторану по коду приглашения');
   if (!permissions.freelanceMode) return new ApiError(403, 'MODE_NOT_ALLOWED', 'Свободные доставки доступны после допуска UzBite');
   return courier.city ? null : new ApiError(409, 'SERVICE_AREA_REQUIRED', 'Выберите город работы');
@@ -818,26 +933,15 @@ export async function changeCourierState<T>(courierId: string, actor: DispatchAc
 }
 async function updateCourierProfile(tx: Tx, out: Outbox, courierId: string, data: Prisma.CourierProfileUpdateInput) {
   const profile = await tx.courierProfile.update({ where: { userId: courierId }, data });
-  out.courier(courierId, 'courier:profile_updated', { isAvailable: profile.isAvailable, workMode: profile.workMode, approvalStatus: profile.approvalStatus });
+  out.courier(courierId, 'courier:profile_updated', { workMode: profile.workMode, approvalStatus: profile.approvalStatus });
   return profile;
 }
 const asCourier = (courierId: string): DispatchActor => ({ id: courierId, role: 'COURIER' });
 
-/** Going offline withdraws open offers; going online re-checks every permission on the server. */
-export async function setCourierAvailability(courierId: string, available: boolean) {
-  if (!available) return changeCourierState(courierId, asCourier(courierId), { reason: 'COURIER_UNAVAILABLE' }, (tx, out) => updateCourierProfile(tx, out, courierId, { isAvailable: false }));
-  const profile = await changeCourierState(courierId, asCourier(courierId), null, async (tx, out, courier) => {
-    const problem = readinessError(courier);
-    if (problem) throw problem;
-    return updateCourierProfile(tx, out, courierId, { isAvailable: true });
-  });
-  await matchCourierToOpenSearches(courierId).catch(() => 0);
-  return profile;
-}
-
 /**
- * The work mode is chosen during onboarding, before any access exists; going online checks the
- * permission. Changing it withdraws open offers and keeps availability only if the new mode is ready.
+ * The work mode is chosen during onboarding, before the restaurant link exists. After onboarding,
+ * own-restaurant mode needs an active link: the code of the restaurant that hired the courier.
+ * Changing the mode withdraws open offers.
  */
 export async function setCourierWorkMode(courierId: string, mode: CourierWorkMode) {
   const current = await db.courierProfile.findUnique({ where: { userId: courierId } });
@@ -845,7 +949,8 @@ export async function setCourierWorkMode(courierId: string, mode: CourierWorkMod
   if (current.workMode === mode) return current;
   const profile = await changeCourierState(courierId, asCourier(courierId), { reason: 'WORK_MODE_CHANGED' }, (tx, out, courier) => {
     assert(courier.approvalStatus !== 'SUSPENDED', 403, 'COURIER_SUSPENDED', 'Аккаунт курьера заблокирован');
-    return updateCourierProfile(tx, out, courierId, { workMode: mode, isAvailable: courier.isAvailable && !readinessError({ ...courier, workMode: mode }) });
+    assert(mode !== 'RESTAURANT' || !courier.onboardingCompletedAt || courier.affiliatedRestaurantIds.length > 0, 409, 'AFFILIATION_REQUIRED', 'Введите код ресторана, который вас нанял');
+    return updateCourierProfile(tx, out, courierId, { workMode: mode });
   });
   await matchCourierToOpenSearches(courierId).catch(() => 0);
   return profile;
@@ -861,29 +966,32 @@ export async function setCourierServiceArea(courierId: string, city: string) {
   return profile;
 }
 
-/** Platform admission (developer CLI for now). Suspension withdraws every open offer and goes offline. */
+/**
+ * Platform admission (developer CLI for now). Suspension withdraws every open offer; approval puts
+ * a free courier on duty at once, including the searches already open in their city.
+ */
 export async function setCourierApproval(courierId: string, status: CourierApprovalStatus, options: { testAccount?: boolean } = {}) {
   const suspend = status === 'SUSPENDED';
-  return changeCourierState(courierId, SYSTEM, suspend ? { reason: 'COURIER_SUSPENDED' } : null, (tx, out) => updateCourierProfile(tx, out, courierId, {
-    approvalStatus: status, ...(suspend ? { isAvailable: false } : {}), ...(options.testAccount === undefined ? {} : { isTestAccount: options.testAccount }),
+  const profile = await changeCourierState(courierId, SYSTEM, suspend ? { reason: 'COURIER_SUSPENDED' } : null, (tx, out) => updateCourierProfile(tx, out, courierId, {
+    approvalStatus: status, ...(options.testAccount === undefined ? {} : { isTestAccount: options.testAccount }),
   }));
+  if (status === 'APPROVED') await matchCourierToOpenSearches(courierId).catch(() => 0);
+  return profile;
 }
 
 /**
  * Ends a restaurant affiliation, by the courier or by the restaurant. Personal offers from that
- * restaurant are withdrawn; without another affiliation a RESTAURANT-mode courier goes offline.
+ * restaurant are withdrawn; without another link an own-restaurant courier stops receiving orders.
  */
 export async function endAffiliation(affiliationId: string, owner: { courierId: string } | { restaurantId: string }, actor: DispatchActor) {
   const affiliation = await db.restaurantCourierAffiliation.findFirst({ where: { id: affiliationId, ...owner } });
   assert(affiliation, 404, 'NOT_FOUND', 'Привязка не найдена');
   const { courierId, restaurantId } = affiliation;
-  return changeCourierState(courierId, actor, { reason: 'AFFILIATION_ENDED', where: { mode: 'RESTAURANT_COURIER', delivery: { restaurantId } } }, async (tx, out, courier) => {
+  return changeCourierState(courierId, actor, { reason: 'AFFILIATION_ENDED', where: { mode: 'RESTAURANT_COURIER', delivery: { restaurantId } } }, async (tx, out) => {
     const current = await tx.restaurantCourierAffiliation.findUniqueOrThrow({ where: { id: affiliationId } });
     if (current.status === 'ENDED') return current;
     assert(!await tx.delivery.findFirst({ where: { courierId, restaurantId, status: { in: ACTIVE_DELIVERY } }, select: { id: true } }), 409, 'ACTIVE_DELIVERY', 'Сначала завершите текущую доставку этого ресторана');
     const ended = await tx.restaurantCourierAffiliation.update({ where: { id: affiliationId }, data: { status: 'ENDED', endedAt: new Date(), endedBy: actor.role } });
-    const remaining = courier.affiliatedRestaurantIds.filter(id => id !== restaurantId).length;
-    if (!remaining && courier.workMode === 'RESTAURANT' && courier.isAvailable) await updateCourierProfile(tx, out, courierId, { isAvailable: false });
     out.emit([`courier:${courierId}`, `restaurant:${restaurantId}`], 'courier:affiliation_updated', { affiliationId, restaurantId, courierId, status: 'ENDED' });
     return ended;
   });

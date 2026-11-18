@@ -32,6 +32,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ['expo-build-properties', { android: { usesCleartextTraffic: development } }],
     // The face photo for courier admission is the only use of the camera and photo library.
     ['expo-image-picker', { cameraPermission: 'UzBite uses the camera to take your face photo for courier approval.', photosPermission: 'UzBite lets you choose a face photo for courier approval.', microphonePermission: false }],
+    // Foreground location only: orders within 5 km while the app is open; no background tracking.
+    ['expo-location', { locationWhenInUsePermission: 'UzBite uses your location while the app is open to show orders within 5 km.', isAndroidBackgroundLocationEnabled: false, isIosBackgroundLocationEnabled: false }],
   ],
   extra: { variant, allowCustomServer: development },
 });

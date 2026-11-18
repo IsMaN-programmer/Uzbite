@@ -458,6 +458,8 @@ model CourierProfile {
   approvalStatus        CourierApprovalStatus          @default(PENDING)
   isTestAccount         Boolean                        @default(false)
   workMode              CourierWorkMode?
+  /// Unused since 2026-11-18: availability is computed from permissions (no "accepting orders" switch).
+  /// Kept to avoid a migration; drop together with the index below in a later migration.
   isAvailable           Boolean                        @default(false)
   /// City for free deliveries (matched by city, never by GPS); null until the courier chooses one.
   city                  String?
@@ -466,6 +468,10 @@ model CourierProfile {
   passportNumber        String?
   facePhotoId           String?                        @unique
   facePhoto             Upload?                        @relation("CourierFacePhoto", fields: [facePhotoId], references: [id], onDelete: SetNull)
+  /// Last position the open app reported (orders within 5 km); null until location access is allowed.
+  latitude              Float?
+  longitude             Float?
+  locationAt            DateTime?
   onboardingStep        Int                            @default(1)
   onboardingCompletedAt DateTime?
   createdAt             DateTime                       @default(now())

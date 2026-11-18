@@ -22,6 +22,10 @@ export function useCourierMap() {
   const { realtime } = useConnectivity();
   return useQuery({ queryKey: ['map'], queryFn: courierApi.map, refetchInterval: fallbackInterval(realtime, 15000) });
 }
+/** Orders within 5 km: polled every 10 s so a new order shows up without any restaurant action. */
+export function useNearbyOrders(enabled: boolean) {
+  return useQuery({ queryKey: ['nearby'], queryFn: courierApi.nearbyOrders, enabled, refetchInterval: 10000 });
+}
 export function useEarnings() {
   return useQuery({ queryKey: ['earnings'], queryFn: courierApi.earnings });
 }

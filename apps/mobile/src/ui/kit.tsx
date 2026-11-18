@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native';
+import { useRef, useState, type ComponentRef, type ReactNode } from 'react';
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import { usePrefs } from '../prefs';
 import { Icon, type IconName } from './Icon';
@@ -183,4 +183,64 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 20 },
   dialog: { width: '100%', maxWidth: 480, alignSelf: 'center', borderRadius: 22, borderWidth: 1, padding: 20, gap: 14 },
   dialogActions: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
+  dropdown: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14 },
+  menu: { position: 'absolute', minWidth: 210, maxWidth: 300, borderRadius: 16, borderWidth: 1, paddingVertical: 6, boxShadow: '0 10px 28px rgba(0,0,0,0.18)' },
+  menuItem: { minHeight: 46, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 10 },
 });
+
+/** A modal card around a small form; the content brings its own buttons (cancel included). */
+export function Dialog({ visible, title, message, onClose, children }: { visible: boolean; title: string; message?: string; onClose: () => void; children: ReactNode }) {
+  const { colors } = usePrefs();
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.backdrop}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
+            <View style={[styles.dialog, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <AppText variant="heading">{title}</AppText>
+              {message ? <AppText muted>{message}</AppText> : null}
+              {children}
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+/** A menu button showing the current choice; the list opens under it, aligned to its right edge. */
+export function Dropdown<T extends string>({ value, options, onChange, label }: { value: T; options: { value: T; label: string }[]; onChange: (value: T) => void; label: string }) {
+  const { colors } = usePrefs();
+  const { width } = useWindowDimensions();
+  const anchor = useRef<ComponentRef<typeof View>>(null);
+  const [menu, setMenu] = useState<{ top: number; right: number } | null>(null);
+  const current = options.find(option => option.value === value) ?? options[0];
+  const open = () => anchor.current?.measureInWindow((x, y, w, h) => setMenu({ top: y + h + 6, right: Math.max(12, width - (x + w)) }));
+  const close = () => setMenu(null);
+  return (
+    <>
+      <Pressable ref={anchor} accessibilityRole="button" accessibilityLabel={`${label}: ${current?.label ?? ''}`} accessibilityState={{ expanded: Boolean(menu) }} onPress={open}
+        style={[styles.chip, styles.dropdown, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+        <Text maxFontSizeMultiplier={1.5} numberOfLines={1} style={{ color: colors.text, fontWeight: '600', fontSize: 14, flexShrink: 1 }}>{current?.label}</Text>
+        <Icon name="down" color={colors.muted} size={18} />
+      </Pressable>
+      <Modal visible={Boolean(menu)} transparent animationType="fade" statusBarTranslucent onRequestClose={close}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityRole="button" accessibilityLabel={label} />
+        {menu ? (
+          <View accessibilityRole="menu" style={[styles.menu, { top: menu.top, right: menu.right, backgroundColor: colors.surface, borderColor: colors.border }]}>
+            {options.map(option => {
+              const active = option.value === value;
+              return (
+                <Pressable key={option.value} accessibilityRole="menuitem" accessibilityState={{ selected: active }} onPress={() => { close(); if (!active) onChange(option.value); }}
+                  style={({ pressed }) => [styles.menuItem, { backgroundColor: pressed ? colors.surfaceAlt : 'transparent' }]}>
+                  <Text maxFontSizeMultiplier={1.5} style={{ flex: 1, fontSize: 15, color: active ? colors.accentText : colors.text, fontWeight: active ? '700' : '500' }}>{option.label}</Text>
+                  {active ? <Icon name="check" color={colors.accentText} size={18} /> : null}
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+      </Modal>
+    </>
+  );
+}

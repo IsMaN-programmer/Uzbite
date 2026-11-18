@@ -1,5 +1,5 @@
 import type {
-  AuthTokens, CourierAccount, CourierAffiliationDto, CourierDelivery, CourierEarnings, CourierHistoryItem, CourierInvitationDto, CourierMap, CourierOffer, CourierWorkMode, Language, Theme,
+  AuthTokens, CourierAccount, CourierAffiliationDto, CourierDelivery, CourierEarnings, CourierHistoryItem, CourierInvitationDto, CourierMap, CourierNearbyOrders, CourierOffer, CourierWorkMode, Language, Theme,
 } from '@uzbite/shared';
 import { call, upload } from './client';
 
@@ -28,7 +28,6 @@ export const courierApi = {
     return data(upload<CourierAccount>('/courier/identity/face-photo', form));
   },
   updateSettings: (input: { language?: Language; theme?: Theme }) => data(call<{ language: Language; theme: Theme }>('patch', '/courier/settings', input)),
-  setAvailability: (available: boolean) => data(call<CourierAccount>('patch', '/courier/availability', { available })),
   setWorkMode: (mode: CourierWorkMode) => data(call<CourierAccount>('patch', '/courier/work-mode', { mode })),
   setServiceArea: (city: string) => data(call<CourierAccount>('patch', '/courier/service-area', { city })),
   onboarding: (input: { step?: number; complete?: true }) => data(call<CourierAccount>('patch', '/courier/onboarding', input)),
@@ -40,6 +39,10 @@ export const courierApi = {
   affiliations: () => data(call<CourierAffiliationDto[]>('get', '/courier/affiliations')),
   endAffiliation: (id: string) => data(call<CourierAffiliationDto>('post', `/courier/affiliations/${id}/end`)),
 
+  /** MVP: the open app reports the courier's position; orders within 5 km; the first to take one gets it. */
+  setLocation: (latitude: number, longitude: number) => data(call<{ saved: boolean }>('patch', '/courier/location', { latitude, longitude })),
+  nearbyOrders: () => data(call<CourierNearbyOrders>('get', '/courier/nearby-orders')),
+  takeOrder: (orderId: string) => data(call<CourierDelivery>('post', `/courier/orders/${orderId}/take`)),
   /** Restaurants waiting for a courier now (free searches of the courier's city and personal offers). */
   map: () => data(call<CourierMap>('get', '/courier/map')),
   /** Offers come with the server clock so deadlines are measured in server time. */

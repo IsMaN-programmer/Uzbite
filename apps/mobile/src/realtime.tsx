@@ -16,11 +16,11 @@ const RealtimeContext = createContext<Connectivity>({ online: true, realtime: fa
 
 const queriesFor = (event: DeliverySocketEvent): string[][] => {
   if (event === 'notification:created') return [['notifications']];
-  if (event === 'courier:map_updated') return [['map']];
+  if (event === 'courier:map_updated') return [['map'], ['nearby']];
   if (event === 'courier:profile_updated') return [['me'], ['map']];
   if (event === 'courier:affiliation_updated') return [['me'], ['affiliations'], ['invitations'], ['map']];
-  if (event.startsWith('delivery:offer_')) return [['offers'], ['active'], ['me'], ['map']];
-  return [['active'], ['delivery'], ['offers'], ['history'], ['earnings'], ['me'], ['map']];
+  if (event.startsWith('delivery:offer_')) return [['offers'], ['active'], ['me'], ['map'], ['nearby']];
+  return [['active'], ['delivery'], ['offers'], ['history'], ['earnings'], ['me'], ['map'], ['nearby']];
 };
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {

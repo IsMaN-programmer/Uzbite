@@ -3,7 +3,7 @@ import type { CourierAccount, CourierEarnings, CourierHistoryItem, CourierHistor
 import { db } from '../config/database.js';
 import { ApiError, assert } from '../utils/errors.js';
 import { ACTIVE_DELIVERY, orderNumber } from './dispatch-dto.js';
-import { courierAvailability, courierPermissions } from './dispatch.js';
+import { courierAvailability, courierPermissions, matchCourierToOpenSearches } from './dispatch.js';
 import { deletePrivateObject, storePrivateImage } from './storage.js';
 
 const language = (value: string | undefined): Language => value === 'uz' || value === 'en' ? value : 'ru';
@@ -21,7 +21,7 @@ export async function courierAccount(userId: string): Promise<CourierAccount> {
     settings: { language: language(user.settings?.language), theme: theme(user.settings?.theme) },
     profile: {
       firstName: profile.firstName, lastName: profile.lastName, approvalStatus: profile.approvalStatus, isTestAccount: profile.isTestAccount,
-      workMode: profile.workMode, isAvailable: profile.isAvailable, availability: courierAvailability(profile, active?.id ?? null),
+      workMode: profile.workMode, availability: courierAvailability(profile, affiliations, active?.id ?? null),
       city: profile.city, onboardingStep: profile.onboardingStep, onboardingCompleted: Boolean(profile.onboardingCompletedAt),
       permissions: courierPermissions(profile, affiliations),
       identity: { passportSeries: profile.passportSeries, passportNumber: profile.passportNumber, facePhoto: Boolean(profile.facePhotoId), locked: identityLocked(profile) },
@@ -47,6 +47,11 @@ export async function setCourierPassport(courierId: string, passportSeries: stri
 }
 
 /** Stores a new private face photo and removes the previous one. */
+/** The open app reports where the courier is; only the last point is kept (orders within 5 km). */
+export async function setCourierLocation(courierId: string, latitude: number, longitude: number) {
+  await db.courierProfile.update({ where: { userId: courierId }, data: { latitude, longitude, locationAt: new Date() } });
+}
+
 export async function setCourierFacePhoto(courierId: string, file: Express.Multer.File | undefined) {
   const profile = await db.courierProfile.findUnique({ where: { userId: courierId }, include: { facePhoto: true } });
   assert(profile, 404, 'NOT_FOUND', 'Профиль курьера не найден');
@@ -80,6 +85,8 @@ export async function updateOnboarding(courierId: string, input: { step?: number
     if (profile.workMode === 'RESTAURANT') assert(profile._count.affiliations > 0, 409, 'AFFILIATION_REQUIRED', 'Введите код приглашения ресторана и подтвердите привязку');
     else assert(profile.city, 409, 'SERVICE_AREA_REQUIRED', 'Выберите город работы');
     await db.courierProfile.update({ where: { userId: courierId }, data: { onboardingStep: 4, onboardingCompletedAt: profile.onboardingCompletedAt ?? new Date() } });
+    // No availability switch: an admitted free courier is on duty as soon as onboarding ends.
+    await matchCourierToOpenSearches(courierId).catch(() => 0);
   } else if (input.step !== undefined) {
     await db.courierProfile.update({ where: { userId: courierId }, data: { onboardingStep: input.step } });
   }

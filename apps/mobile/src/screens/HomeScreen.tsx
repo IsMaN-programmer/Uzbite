@@ -1,39 +1,31 @@
-import { Pressable, Switch, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useQueryClient } from '@tanstack/react-query';
-import { courierApi } from '../api/courier';
 import { usePrefs } from '../prefs';
-import { useConnectivity } from '../realtime';
 import { useAccount, useActiveDelivery, useEarnings, useOffers } from '../hooks';
 import { money } from '../lib/format';
 import { Icon } from '../ui/Icon';
-import { AppText, Badge, Banner, Button, Card, Screen } from '../ui/kit';
-import { Avatar, ConnectionBanner, PermissionNotice, StatusPill, useAction } from './shared';
+import { AppText, Badge, Banner, Card, Screen } from '../ui/kit';
+import { Avatar, ConnectionBanner, PermissionNotice, StatusPill } from './shared';
 import type { RootStackParams } from '../navigation';
 
 type Nav = NativeStackNavigationProp<RootStackParams>;
 
+/**
+ * No "accepting orders" switch: the server keeps a verified courier (restaurant link for own-restaurant
+ * mode, UzBite approval for free deliveries) on duty, and offers simply arrive. A courier who is not
+ * verified for the current mode sees one plain line instead of the map.
+ */
 export function HomeScreen() {
   const navigation = useNavigation<Nav>();
   const { t, colors, language } = usePrefs();
-  const { online } = useConnectivity();
-  const queryClient = useQueryClient();
   const account = useAccount(), active = useActiveDelivery(), offers = useOffers(), earnings = useEarnings();
-  const toggle = useAction();
   const data = account.data!;
   const profile = data.profile;
+  const verified = profile.availability !== 'UNAVAILABLE';
   const offerCount = offers.data?.items.length ?? 0;
   const refreshing = account.isFetching || active.isFetching || offers.isFetching || earnings.isFetching;
   const refresh = () => { void Promise.all([account.refetch(), active.refetch(), offers.refetch(), earnings.refetch()]); };
-  const setAvailable = (value: boolean) => void toggle.run(async () => {
-    const next = await courierApi.setAvailability(value);
-    queryClient.setQueryData(['me'], next);
-    await Promise.all([queryClient.invalidateQueries({ queryKey: ['offers'] }), queryClient.invalidateQueries({ queryKey: ['map'] })]);
-    // Going online (confirmed by the server) opens the map of restaurants waiting for a courier.
-    if (value && next.profile.isAvailable) navigation.navigate('Map');
-  });
-  const canGoOnline = profile.workMode === 'RESTAURANT' ? profile.permissions.restaurantMode : profile.workMode === 'FREELANCE' ? profile.permissions.freelanceMode : false;
 
   return (
     <Screen refreshing={refreshing} onRefresh={refresh}>
@@ -50,20 +42,19 @@ export function HomeScreen() {
       </View>
       <ConnectionBanner />
       <PermissionNotice account={data} />
+      {!verified && profile.permissions.reason !== 'SUSPENDED' ? <Banner tone="info" icon="shield" text={t('verifiedOnly')} /> : null}
 
-      <Card>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <View style={{ flex: 1, gap: 6 }}>
-            <AppText variant="heading">{t('homeAvailability')}</AppText>
+      {verified ? (
+        <Card onPress={() => navigation.navigate('Map')} accessibilityLabel={t('mapTitle')}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Icon name="map" color={colors.accentText} />
+            <AppText variant="heading" style={{ flex: 1 }}>{t('mapTitle')}</AppText>
             <StatusPill availability={profile.availability} />
           </View>
-          <Switch accessibilityLabel={t('homeAvailability')} value={profile.isAvailable} disabled={toggle.busy || !online || (!profile.isAvailable && !canGoOnline)} onValueChange={setAvailable}
-            trackColor={{ true: colors.accent, false: colors.border }} thumbColor={colors.surface} ios_backgroundColor={colors.border} />
-        </View>
-        {profile.availability === 'BUSY' ? <AppText variant="caption" muted>{t('homeBusy')}</AppText> : null}
-        {toggle.error ? <Banner tone="danger" text={toggle.error} /> : null}
-        {profile.isAvailable ? <Button title={t('mapOpen')} icon="map" variant="secondary" onPress={() => navigation.navigate('Map')} /> : null}
-      </Card>
+          <AppText muted>{profile.availability === 'BUSY' ? t('homeBusy') : t('mapHint')}</AppText>
+          <AppText variant="label" color={colors.accentText}>{t('open')}</AppText>
+        </Card>
+      ) : null}
 
       {active.data ? (
         <Card onPress={() => navigation.navigate('Delivery', { id: active.data!.id })} accessibilityLabel={t('homeActive')}>
@@ -77,14 +68,16 @@ export function HomeScreen() {
         </Card>
       ) : null}
 
-      <Card onPress={() => navigation.navigate('Tabs', { screen: 'Offers' })} accessibilityLabel={t('homeOffers')}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Icon name="orders" color={colors.accentText} />
-          <AppText variant="heading" style={{ flex: 1 }}>{t('homeOffers')}</AppText>
-          {offerCount ? <Badge tone="accent" text={String(offerCount)} /> : null}
-        </View>
-        <AppText muted>{offerCount ? offers.data!.items.map(offer => offer.restaurant.name).slice(0, 3).join(', ') : t('homeNoOffers')}</AppText>
-      </Card>
+      {verified ? (
+        <Card onPress={() => navigation.navigate('Tabs', { screen: 'Offers' })} accessibilityLabel={t('homeOffers')}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Icon name="orders" color={colors.accentText} />
+            <AppText variant="heading" style={{ flex: 1 }}>{t('homeOffers')}</AppText>
+            {offerCount ? <Badge tone="accent" text={String(offerCount)} /> : null}
+          </View>
+          <AppText muted>{offerCount ? offers.data!.items.map(offer => offer.restaurant.name).slice(0, 3).join(', ') : t('homeNoOffers')}</AppText>
+        </Card>
+      ) : null}
 
       <Card onPress={() => navigation.navigate('Earnings')} accessibilityLabel={t('homeEarnings')}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>

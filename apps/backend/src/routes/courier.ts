@@ -9,12 +9,12 @@ import { requireCourier } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/security.js';
 import { createAppSession, refreshAppSession, revokeAppSession } from '../services/auth.js';
 import { disconnectSession } from '../services/realtime.js';
-import { courierAccount, courierEarnings, courierHistory, setCourierFacePhoto, setCourierPassport, updateOnboarding } from '../services/courier-account.js';
+import { courierAccount, courierEarnings, courierHistory, setCourierFacePhoto, setCourierLocation, setCourierPassport, updateOnboarding } from '../services/courier-account.js';
 import { acceptInvitation, claimInvitation, courierAffiliation, listCourierAffiliations, listCourierInvitations, rejectInvitation } from '../services/affiliations.js';
 import { courierMap } from '../services/courier-map.js';
 import {
   acceptOffer, completeDelivery, confirmCashCollected, confirmPickup, endAffiliation, getActiveCourierDelivery, getCourierDelivery, getCourierOffer,
-  listCourierOffers, rejectOffer, reportHandoffProblem, requestCourierCancellation, setCourierAvailability, setCourierServiceArea, setCourierWorkMode, startDelivery,
+  listCourierOffers, listNearbyOrders, rejectOffer, reportHandoffProblem, requestCourierCancellation, setCourierServiceArea, setCourierWorkMode, startDelivery, takeOrder,
 } from '../services/dispatch.js';
 import { assert } from '../utils/errors.js';
 import { pageMetadata, paginationSchema } from '../utils/pagination.js';
@@ -112,11 +112,7 @@ courierRouter.patch('/settings', async (req, res) => {
   await db.userSettings.upsert({ where: { userId: me(req) }, create: { userId: me(req), language: input.language ?? 'ru', theme: input.theme ?? 'light' }, update: input });
   res.json({ data: (await courierAccount(me(req))).settings });
 });
-courierRouter.patch('/availability', async (req, res) => {
-  const { available } = z.object({ available: z.boolean() }).strict().parse(req.body);
-  await setCourierAvailability(me(req), available);
-  res.json({ data: await courierAccount(me(req)) });
-});
+// No availability switch: a courier permitted for the current mode is always on duty (see dispatch.ts).
 courierRouter.patch('/work-mode', async (req, res) => {
   const { mode } = z.object({ mode: z.enum(['RESTAURANT', 'FREELANCE']) }).strict().parse(req.body);
   await setCourierWorkMode(me(req), mode);
@@ -158,6 +154,14 @@ courierRouter.get('/delivery-offers', async (req, res) => {
   const { serverTime, items } = await listCourierOffers(me(req));
   res.json({ data: items, serverTime });
 });
+// MVP: open orders within 5 km of the courier's last position; the first courier to take one gets it.
+courierRouter.patch('/location', rateLimit('courier-location', 600, 3600), async (req, res) => {
+  const { latitude, longitude } = z.object({ latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180) }).strict().parse(req.body);
+  await setCourierLocation(me(req), latitude, longitude);
+  res.json({ data: { saved: true } });
+});
+courierRouter.get('/nearby-orders', async (req, res) => { res.json({ data: await listNearbyOrders(me(req)) }); });
+courierRouter.post('/orders/:id/take', actions, async (req, res) => { res.json({ data: await takeOrder(me(req), routeId(req)) }); });
 /** Restaurants waiting for a courier now: free searches of the courier's city and personal offers. */
 courierRouter.get('/map', async (req, res) => { res.json({ data: await courierMap(me(req)) }); });
 courierRouter.get('/delivery-offers/:id', async (req, res) => { res.json({ data: await getCourierOffer(me(req), routeId(req)), serverTime: new Date().toISOString() }); });

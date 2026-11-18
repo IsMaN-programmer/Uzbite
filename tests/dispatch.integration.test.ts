@@ -35,11 +35,13 @@ async function makeStaff(restaurantId: string, label: string): Promise<dispatch.
   await db.restaurantStaff.create({ data: { userId: id, restaurantId } });
   return { id, role: 'RESTAURANT' };
 }
-async function makeCourier(label: string, profile: Partial<Pick<CourierProfile, 'approvalStatus' | 'workMode' | 'isAvailable' | 'city' | 'onboardingCompletedAt'>> = {}) {
+async function makeCourier(label: string, profile: Partial<Pick<CourierProfile, 'approvalStatus' | 'workMode' | 'city' | 'onboardingCompletedAt'>> = {}) {
   const id = await makeUser('COURIER', label);
   await db.courierProfile.create({ data: { userId: id, firstName: label, lastName: 'Test', onboardingStep: 5, onboardingCompletedAt: new Date(), city: 'tashkent', ...profile } });
   return id;
 }
+/** Admitted free couriers are always on duty: test couriers leave the pool so later searches skip them. */
+const leavePool = (courierIds: string[]) => db.courierProfile.updateMany({ where: { userId: { in: courierIds } }, data: { approvalStatus: 'SUSPENDED' } });
 async function affiliate(courierId: string, restaurantId = RESTAURANT) {
   await db.restaurantCourierAffiliation.create({ data: { restaurantId, courierId, invitedAt: new Date() } });
 }
@@ -81,7 +83,7 @@ after(async () => {
 });
 
 test('Own courier: personal offer, accept, ready, pickup, start, cash, code, delivered, settlement and reward', async () => {
-  const courier = await makeCourier('own', { workMode: 'RESTAURANT', isAvailable: true });
+  const courier = await makeCourier('own', { workMode: 'RESTAURANT' });
   await affiliate(courier);
   const orderId = await makeOrder('CASH');
   const order = await db.order.findUniqueOrThrow({ where: { id: orderId } });
@@ -147,11 +149,11 @@ test('Own courier: personal offer, accept, ready, pickup, start, cash, code, del
   assert.equal((await db.notification.count({ where: { userId: otherStaff.id!, metadata: { path: ['orderId'], equals: orderId } } })), 0, 'Another restaurant is never notified');
 });
 
-test('Free search: city matching, late availability and atomic acceptance by exactly one courier', async () => {
+test('Free search: city matching, approval during the search and atomic acceptance by exactly one courier', async () => {
   assert.equal((await db.restaurant.findUniqueOrThrow({ where: { id: RESTAURANT } })).city, 'tashkent');
-  const free = { approvalStatus: 'APPROVED' as const, workMode: 'FREELANCE' as const, isAvailable: true, city: 'tashkent' };
+  const free = { approvalStatus: 'APPROVED' as const, workMode: 'FREELANCE' as const, city: 'tashkent' };
   const first = await makeCourier('free_a', free), second = await makeCourier('free_b', free);
-  const late = await makeCourier('free_late', { ...free, isAvailable: false });
+  const late = await makeCourier('free_late', { ...free, approvalStatus: 'PENDING' });
   const elsewhere = await makeCourier('free_far', { ...free, city: 'samarkand' });
   const unapproved = await makeCourier('free_pending', { ...free, approvalStatus: 'PENDING' });
   const freelancers = [first, second, late, elsewhere, unapproved];
@@ -163,11 +165,14 @@ test('Free search: city matching, late availability and atomic acceptance by exa
     assert.equal(search.reward, order.deliveryFee.toNumber(), 'Without an explicit amount the reward is the paid delivery fee');
     const deliveryId = search.id as string;
     const offered = await db.deliveryOffer.findMany({ where: { deliveryId } });
-    assert.deepEqual(new Set(offered.map(offer => offer.courierId)), new Set([first, second]));
+    // Admitted couriers are always on duty, so other eligible couriers in the database may be offered it too.
+    const offeredTo = new Set(offered.map(offer => offer.courierId));
+    assert.ok(offeredTo.has(first) && offeredTo.has(second), 'Every admitted free courier of the city is offered the search');
+    for (const outsider of [late, elsewhere, unapproved]) assert.equal(offeredTo.has(outsider), false, 'Not approved or another city: no offer');
     assert.ok(offered.every(offer => offer.expiresAt.getTime() === (search.searchExpiresAt ? Date.parse(search.searchExpiresAt as string) : NaN)), 'Free-search offers live as long as the search');
 
-    await dispatch.setCourierAvailability(late, true);
-    assert.equal((await offerFor(late, deliveryId)).status, 'PENDING', 'A courier who became available during the search is offered it');
+    await dispatch.setCourierApproval(late, 'APPROVED');
+    assert.equal((await offerFor(late, deliveryId)).status, 'PENDING', 'A courier approved during the search is offered it at once');
 
     const [a, b] = await Promise.all([offerFor(first, deliveryId), offerFor(second, deliveryId)]);
     const results = await Promise.allSettled([dispatch.acceptOffer(first, a.id), dispatch.acceptOffer(second, b.id)]);
@@ -186,12 +191,12 @@ test('Free search: city matching, late availability and atomic acceptance by exa
     assert.equal(((await dispatch.getRestaurantDelivery(RESTAURANT, orderId)) as { courier: { id: string } }).courier.id, winner);
     await rejectsWith(dispatch.acceptOffer(loser, (await offerFor(loser, deliveryId)).id), 'OFFER_TAKEN');
   } finally {
-    for (const courierId of freelancers) await dispatch.setCourierAvailability(courierId, false);
+    await leavePool(freelancers);
   }
 });
 
 test('Deadlines use server time: expired personal offers and searches return to the restaurant', async () => {
-  const own = await makeCourier('exp_own', { workMode: 'RESTAURANT', isAvailable: true });
+  const own = await makeCourier('exp_own', { workMode: 'RESTAURANT' });
   await affiliate(own);
   const orderId = await makeOrder('CASH');
   await dispatch.offerToOwnCourier(RESTAURANT, orderId, { courierId: own }, staff);
@@ -210,7 +215,7 @@ test('Deadlines use server time: expired personal offers and searches return to 
   assert.equal((await deliveryOf(orderId)).status, 'NOT_REQUESTED');
   assert.ok(await db.notification.count({ where: { userId: staff.id!, metadata: { path: ['event'], equals: 'OFFER_EXPIRED' } } }));
 
-  const free = await makeCourier('exp_free', { approvalStatus: 'APPROVED', workMode: 'FREELANCE', isAvailable: true });
+  const free = await makeCourier('exp_free', { approvalStatus: 'APPROVED', workMode: 'FREELANCE' });
   try {
     await dispatch.startFreeSearch(RESTAURANT, orderId, { reward: 20000 }, staff);
     const freeOffer = await offerFor(free, deliveryId);
@@ -221,12 +226,16 @@ test('Deadlines use server time: expired personal offers and searches return to 
     assert.equal((await offerFor(free, deliveryId)).status, 'EXPIRED');
     assert.ok(await db.notification.count({ where: { userId: staff.id!, metadata: { path: ['event'], equals: 'SEARCH_EXPIRED' } } }));
     await rejectsWith(dispatch.acceptOffer(free, freeOffer.id), 'OFFER_EXPIRED');
-    assert.deepEqual((await eventTypes(deliveryId)).filter(type => type.includes('EXPIRED')), ['OFFER_EXPIRED', 'OFFER_EXPIRED', 'OFFER_EXPIRED', 'SEARCH_EXPIRED']);
-  } finally { await dispatch.setCourierAvailability(free, false); }
+    // Only this test's couriers: other admitted couriers in the database may also have been offered the search.
+    const ours = new Set((await db.deliveryOffer.findMany({ where: { deliveryId, courierId: { in: [own, free] } }, select: { id: true } })).map(offer => offer.id));
+    const expiredEvents = (await db.deliveryEvent.findMany({ where: { deliveryId }, orderBy: { createdAt: 'asc' } }))
+      .filter(event => event.type.includes('EXPIRED') && (!event.offerId || ours.has(event.offerId))).map(event => event.type);
+    assert.deepEqual(expiredEvents, ['OFFER_EXPIRED', 'OFFER_EXPIRED', 'OFFER_EXPIRED', 'SEARCH_EXPIRED']);
+  } finally { await leavePool([free]); }
 });
 
 test('Rejection and cancellation by restaurant and courier, before and after pickup', async () => {
-  const own = await makeCourier('cancel_own', { workMode: 'RESTAURANT', isAvailable: true });
+  const own = await makeCourier('cancel_own', { workMode: 'RESTAURANT' });
   await affiliate(own);
   const orderId = await makeOrder('CASH');
   await dispatch.offerToOwnCourier(RESTAURANT, orderId, { courierId: own }, staff);
@@ -283,8 +292,8 @@ test('Rejection and cancellation by restaurant and courier, before and after pic
 });
 
 test('Security and limits: foreign access, eligibility, one active delivery, handoff limit and fallback', async () => {
-  const own = await makeCourier('sec_own', { workMode: 'RESTAURANT', isAvailable: true });
-  const stranger = await makeCourier('sec_stranger', { workMode: 'RESTAURANT', isAvailable: true });
+  const own = await makeCourier('sec_own', { workMode: 'RESTAURANT' });
+  const stranger = await makeCourier('sec_stranger', { workMode: 'RESTAURANT' });
   await affiliate(own); await affiliate(stranger, OTHER_RESTAURANT);
   const orderA = await makeOrder('CASH'), orderB = await makeOrder('CARD');
   await rejectsWith(dispatch.offerToOwnCourier(RESTAURANT, orderA, { courierId: stranger }, staff), 'NOT_AFFILIATED');
@@ -317,38 +326,36 @@ test('Security and limits: foreign access, eligibility, one active delivery, han
   assert.equal(confirmed.completedVia, 'RESTAURANT_CONFIRMATION');
   assert.equal((await db.order.findUniqueOrThrow({ where: { id: orderA } })).status, 'DELIVERED');
 
-  const suspended = await makeCourier('sec_suspended', { workMode: 'RESTAURANT', isAvailable: true });
+  const suspended = await makeCourier('sec_suspended', { workMode: 'RESTAURANT' });
   await affiliate(suspended);
   await dispatch.offerToOwnCourier(RESTAURANT, orderB, { courierId: suspended }, staff);
   const deliveryB = (await deliveryOf(orderB)).id;
   // A status changed behind the courier's back is caught at acceptance time.
   await db.courierProfile.update({ where: { userId: suspended }, data: { approvalStatus: 'SUSPENDED' } });
   await rejectsWith(dispatch.acceptOffer(suspended, (await offerFor(suspended, deliveryB)).id), 'COURIER_SUSPENDED');
-  await rejectsWith(dispatch.setCourierAvailability(suspended, true), 'COURIER_SUSPENDED');
   const blocked = await dispatch.setCourierApproval(suspended, 'SUSPENDED');
-  assert.equal(blocked.isAvailable, false);
+  assert.equal(blocked.approvalStatus, 'SUSPENDED');
   assert.equal((await offerFor(suspended, deliveryB)).status, 'WITHDRAWN');
   assert.equal((await deliveryOf(orderB)).status, 'NOT_REQUESTED');
 
-  // The work mode is a preference; going online checks the permission for it.
+  // No availability switch: the work mode and its permission decide. After onboarding, own-restaurant
+  // mode needs the restaurant link (the hiring restaurant's code).
   const newcomer = await makeCourier('sec_new', { approvalStatus: 'PENDING' });
-  await rejectsWith(dispatch.setCourierAvailability(newcomer, true), 'WORK_MODE_REQUIRED');
+  await rejectsWith(dispatch.offerToOwnCourier(RESTAURANT, orderB, { courierId: newcomer }, staff), 'WRONG_WORK_MODE');
   await dispatch.setCourierWorkMode(newcomer, 'FREELANCE');
-  await rejectsWith(dispatch.setCourierAvailability(newcomer, true), 'MODE_NOT_ALLOWED');
-  assert.equal((await dispatch.setCourierWorkMode(newcomer, 'RESTAURANT')).workMode, 'RESTAURANT');
-  await rejectsWith(dispatch.setCourierAvailability(newcomer, true), 'MODE_NOT_ALLOWED');
+  await rejectsWith(dispatch.setCourierWorkMode(newcomer, 'RESTAURANT'), 'AFFILIATION_REQUIRED');
   await affiliate(newcomer);
-  await dispatch.setCourierAvailability(newcomer, true);
+  assert.equal((await dispatch.setCourierWorkMode(newcomer, 'RESTAURANT')).workMode, 'RESTAURANT');
   await dispatch.offerToOwnCourier(RESTAURANT, orderB, { courierId: newcomer }, staff);
-  await dispatch.setCourierAvailability(newcomer, false);
-  assert.equal((await offerFor(newcomer, deliveryB)).status, 'WITHDRAWN', 'Going offline withdraws open offers');
+  await dispatch.setCourierWorkMode(newcomer, 'FREELANCE');
+  assert.equal((await offerFor(newcomer, deliveryB)).status, 'WITHDRAWN', 'Changing the work mode withdraws open offers');
   assert.equal((await deliveryOf(orderB)).status, 'NOT_REQUESTED');
 
-  // Acceptance racing the courier going offline ends in one consistent state (no deadlock, no half state).
-  await dispatch.setCourierAvailability(newcomer, true);
+  // Acceptance racing a work-mode change ends in one consistent state (no deadlock, no half state).
+  await dispatch.setCourierWorkMode(newcomer, 'RESTAURANT');
   await dispatch.offerToOwnCourier(RESTAURANT, orderB, { courierId: newcomer }, staff);
   const racing = await offerFor(newcomer, deliveryB);
-  const [accepted] = await Promise.allSettled([dispatch.acceptOffer(newcomer, racing.id), dispatch.setCourierAvailability(newcomer, false)]);
+  const [accepted] = await Promise.allSettled([dispatch.acceptOffer(newcomer, racing.id), dispatch.setCourierWorkMode(newcomer, 'FREELANCE')]);
   const after = await deliveryOf(orderB), offerAfter = await offerFor(newcomer, deliveryB);
   if (accepted.status === 'fulfilled') {
     assert.equal(after.courierId, newcomer); assert.equal(offerAfter.status, 'ACCEPTED');

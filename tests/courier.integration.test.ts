@@ -5,7 +5,7 @@ import { execFile } from 'node:child_process';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { io, type Socket } from 'socket.io-client';
-import type { AuthTokens, CourierAccount, CourierDelivery, CourierEarnings, CourierHistoryItem, CourierMap, CourierMapHint, CourierOffer, DeliverySocketHint } from '@uzbite/shared';
+import type { AuthTokens, CourierAccount, CourierDelivery, CourierEarnings, CourierHistoryItem, CourierMap, CourierMapHint, CourierNearbyOrders, CourierOffer, DeliverySocketHint } from '@uzbite/shared';
 import { db } from '../apps/backend/src/config/database.js';
 import { deletePrivateObject } from '../apps/backend/src/services/storage.js';
 
@@ -117,6 +117,12 @@ async function acceptedOrder(restaurant: AppClient, label: string) {
   assert.equal((await restaurant.request<Json>('POST', `/restaurant/orders/${order.data.id}/accept`)).data.status, 'ACCEPTED');
   return { customer, orderId: order.data.id };
 }
+
+/**
+ * Admitted free couriers are always on duty, so test couriers leave the pool when their test ends:
+ * later free searches (of this run or of a developer) must not be offered to them.
+ */
+const leavePool = (...courierIds: string[]) => db.courierProfile.updateMany({ where: { userId: { in: courierIds } }, data: { approvalStatus: 'SUSPENDED' } });
 
 let osh: AppClient, basilico: AppClient;
 before(async () => {
@@ -257,7 +263,7 @@ test('Own courier end to end over REST: customer order → restaurant → courie
   const { client: courier, id: courierId } = await registerCourier('own', 'uz');
   await linkToRestaurant(osh, courier);
   await onboard(courier, 'RESTAURANT');
-  assert.equal((await courier.request<CourierAccount>('PATCH', '/courier/availability', { available: true })).data.profile.availability, 'AVAILABLE');
+  assert.equal((await courier.request<CourierAccount>('GET', '/courier/me')).data.profile.availability, 'AVAILABLE', 'A linked courier is on duty without any switch');
   const { customer, orderId } = await acceptedOrder(osh, 'own_customer');
   assert.ok((await osh.request<{ id: string }[]>('GET', '/restaurant/orders')).data.some(order => order.id === orderId));
   assert.equal((await basilico.request('GET', `/restaurant/orders/${orderId}`)).status, 404, 'Another restaurant cannot see the order');
@@ -326,10 +332,12 @@ test('Free search over REST: admission by CLI, city setup, two couriers race and
   const first = await registerCourier('free_one'), second = await registerCourier('free_two');
   for (const courier of [first, second]) {
     await onboard(courier.client, 'FREELANCE');
-    assert.equal((await courier.client.request('PATCH', '/courier/availability', { available: true })).error?.code, 'MODE_NOT_ALLOWED', 'Free deliveries need admission');
+    assert.equal((await courier.client.request<CourierAccount>('GET', '/courier/me')).data.profile.availability, 'UNAVAILABLE', 'Free deliveries need admission');
     assert.match(await cli('courier-approve.ts', emailOf(courier.client === first.client ? 'free_one' : 'free_two'), '--test'), /APPROVED \(test account\)/);
-    assert.equal((await courier.client.request<CourierAccount>('PATCH', '/courier/availability', { available: true })).data.profile.availability, 'AVAILABLE');
+    assert.equal((await courier.client.request<CourierAccount>('GET', '/courier/me')).data.profile.availability, 'AVAILABLE', 'Admission puts the courier on duty at once');
   }
+  assert.equal((await first.client.request('PATCH', '/courier/availability', { available: false })).status, 404, 'There is no availability switch');
+  assert.equal((await first.client.request('PATCH', '/courier/work-mode', { mode: 'RESTAURANT' })).error?.code, 'AFFILIATION_REQUIRED', 'Own-restaurant mode needs the code of the hiring restaurant');
   try {
     const { orderId } = await acceptedOrder(osh, 'free_customer');
     const search = await osh.request<Json>('POST', `/restaurant/orders/${orderId}/delivery/search`, {});
@@ -354,7 +362,7 @@ test('Free search over REST: admission by CLI, city setup, two couriers race and
     assert.equal((await osh.request('POST', `/restaurant/orders/${orderId}/delivery/cancel`, { reason: 'Тест: отменяем назначение' })).status, 200);
     assert.equal((await winner.client.request('GET', '/courier/deliveries/active')).data, null);
   } finally {
-    for (const courier of [first, second]) await courier.client.request('PATCH', '/courier/availability', { available: false });
+    await leavePool(first.id, second.id);
   }
 });
 
@@ -372,13 +380,13 @@ test('Restaurant cancels with a reason the customer sees; suspension and payment
   const { client: courier } = await registerCourier('suspended');
   await linkToRestaurant(osh, courier);
   await onboard(courier, 'RESTAURANT');
-  assert.equal((await courier.request('PATCH', '/courier/availability', { available: true })).status, 200);
+  assert.equal((await courier.request<CourierAccount>('GET', '/courier/me')).data.profile.availability, 'AVAILABLE');
   assert.equal((await courier.request('POST', `/restaurant/orders/${orderId}/payment`, { status: 'PAID' })).status, 403, 'A courier cannot confirm payments');
   assert.match(await cli('courier-approve.ts', emailOf('suspended'), '--suspend'), /SUSPENDED/);
   const account = (await courier.request<CourierAccount>('GET', '/courier/me')).data;
   assert.equal(account.profile.availability, 'UNAVAILABLE');
   assert.deepEqual(account.profile.permissions, { restaurantMode: false, freelanceMode: false, reason: 'SUSPENDED' });
-  assert.equal((await courier.request('PATCH', '/courier/availability', { available: true })).error?.code, 'COURIER_SUSPENDED');
+  assert.equal((await courier.request('PATCH', '/courier/work-mode', { mode: 'FREELANCE' })).error?.code, 'COURIER_SUSPENDED');
 });
 
 const sockets: Socket[] = [];
@@ -410,7 +418,6 @@ test('Socket.IO: Bearer auth, server-assigned rooms, foreign rooms refused, even
   const { client: stranger } = await registerCourier('socket_stranger');
   await linkToRestaurant(osh, courier);
   await onboard(courier, 'RESTAURANT');
-  await courier.request('PATCH', '/courier/availability', { available: true });
   try {
     assert.equal(await opened(connect()), false, 'No credentials, no connection');
     assert.equal(await opened(connect({ token: `${courier.tokens!.accessToken.slice(0, -6)}abcdef` })), false, 'A tampered token is refused');
@@ -475,14 +482,67 @@ test('Socket.IO: Bearer auth, server-assigned rooms, foreign rooms refused, even
   }
 });
 
+test('Nearby orders (MVP): a new order shows to verified couriers within 5 km of the restaurant; the first «Взять заказ» wins', async () => {
+  const restaurant = await db.restaurant.findUniqueOrThrow({ where: { slug: 'osh-olov' } });
+  const couriers = await Promise.all(['near_one', 'near_two', 'near_far'].map(label => registerCourier(label)));
+  for (const [index, courier] of couriers.entries()) {
+    await onboard(courier.client, 'FREELANCE');
+    assert.match(await cli('courier-approve.ts', emailOf(['near_one', 'near_two', 'near_far'][index]!), '--test'), /APPROVED/);
+  }
+  const [one, two, far] = couriers as [typeof couriers[0], typeof couriers[0], typeof couriers[0]];
+  try {
+    assert.equal((await one.client.request<{ located: boolean }>('GET', '/courier/nearby-orders')).data.located, false, 'No position reported yet');
+    // About 1 km and 11 km north of the restaurant.
+    for (const [courier, shift] of [[one, 0.009], [two, 0.009], [far, 0.1]] as const) {
+      assert.equal((await courier.client.request('PATCH', '/courier/location', { latitude: restaurant.latitude + shift, longitude: restaurant.longitude })).status, 200);
+    }
+    assert.equal((await one.client.request('PATCH', '/courier/location', { latitude: 120, longitude: 0 })).status, 400);
+
+    const customer = new BrowserSession();
+    await customer.register('near_customer');
+    const address = await customer.request<{ id: string }>('POST', '/addresses', { latitude: 41.3, longitude: 69.25, addressText: 'Nearby test address', label: 'Home', apartment: '3' });
+    const created = await customer.request<{ id: string; status: string }>('POST', '/orders', { items: [{ dishId: 'dish-plov', quantity: 1 }], addressId: address.data.id, recipientName: 'Nearby Customer', recipientPhone: '+998907650000', paymentMethod: 'CASH' });
+    assert.equal(created.status, 201, JSON.stringify(created.error));
+    const orderId = created.data.id;
+    assert.equal(created.data.status, 'PENDING_ACCEPTANCE', 'No restaurant action is needed');
+
+    const list = await one.client.request<CourierNearbyOrders>('GET', '/courier/nearby-orders');
+    const found = list.data.items.find(item => item.orderId === orderId);
+    assert.ok(found, 'A courier 1 km away sees the new order');
+    assert.ok(found.distanceKm <= 5 && found.distanceKm > 0.5);
+    assert.deepEqual([found.restaurant.latitude, found.restaurant.longitude], [restaurant.latitude, restaurant.longitude]);
+    assert.equal(JSON.stringify(list.data).includes('+998907650000') || JSON.stringify(list.data).includes('Nearby test address'), false, 'No customer data before taking');
+    assert.equal((await far.client.request<CourierNearbyOrders>('GET', '/courier/nearby-orders')).data.items.some(item => item.orderId === orderId), false, 'A courier 11 km away does not see it');
+    assert.equal((await far.client.request('POST', `/courier/orders/${orderId}/take`)).error?.code, 'TOO_FAR');
+
+    const results = await Promise.all([one.client.request<CourierDelivery>('POST', `/courier/orders/${orderId}/take`), two.client.request<CourierDelivery>('POST', `/courier/orders/${orderId}/take`)]);
+    assert.deepEqual(results.map(result => result.status).sort(), [200, 409], 'Exactly one courier gets the order');
+    const lost = results.find(result => result.status === 409)!;
+    assert.equal(lost.error?.code, 'OFFER_TAKEN');
+    const winner = results[0]!.status === 200 ? one : two, loser = winner === one ? two : one;
+    const taken = results.find(result => result.status === 200)!.data;
+    assert.equal(taken.status, 'ASSIGNED');
+    assert.equal(taken.restaurant.latitude, restaurant.latitude);
+    assert.equal((await winner.client.request<CourierDelivery>('GET', '/courier/deliveries/active')).data.id, taken.id, 'The order is the winner’s active delivery');
+    assert.equal((await winner.client.request('POST', `/courier/orders/${orderId}/take`)).status, 200, 'Taking again is idempotent');
+    assert.equal((await loser.client.request<CourierNearbyOrders>('GET', '/courier/nearby-orders')).data.items.some(item => item.orderId === orderId), false, 'Gone for everyone else');
+    const history = await winner.client.request<CourierHistoryItem[]>('GET', '/courier/history');
+    assert.ok(history.data.some(item => item.deliveryId === taken.id && item.outcome === 'IN_PROGRESS'));
+    const seen = await customer.request<{ delivery: { courierAssigned: boolean } | null }>('GET', `/orders/${orderId}`);
+    assert.equal(seen.data.delivery?.courierAssigned, true, 'The customer sees that a courier took the order');
+  } finally {
+    await leavePool(...couriers.map(courier => courier.id));
+  }
+});
+
 test('Courier map: a free search puts the restaurant on the map of admitted couriers of its city, with a live hint', async () => {
   const restaurant = await db.restaurant.findUniqueOrThrow({ where: { slug: 'osh-olov' } });
-  const { client: courier } = await registerCourier('map_free');
+  const { client: courier, id: courierId } = await registerCourier('map_free');
   const { client: waiting } = await registerCourier('map_waiting');
   await onboard(courier, 'FREELANCE');
   await onboard(waiting, 'FREELANCE');
   assert.match(await cli('courier-approve.ts', emailOf('map_free'), '--test'), /APPROVED \(test account\)/);
-  assert.equal((await courier.request<CourierAccount>('PATCH', '/courier/availability', { available: true })).data.profile.availability, 'AVAILABLE');
+  assert.equal((await courier.request<CourierAccount>('GET', '/courier/me')).data.profile.availability, 'AVAILABLE');
   const mapSocket = connect({ token: courier.tokens!.accessToken }), waitingSocket = connect({ token: waiting.tokens!.accessToken });
   let orderId = '';
   try {
@@ -521,7 +581,7 @@ test('Courier map: a free search puts the restaurant on the map of admitted cour
     assert.equal(waitingHeard, false, 'Couriers outside the map room hear nothing');
   } finally {
     if (orderId) await osh.request('POST', `/restaurant/orders/${orderId}/delivery/cancel`, { reason: 'Тест карты: снимаем назначение' });
-    await courier.request('PATCH', '/courier/availability', { available: false });
+    await leavePool(courierId);
     mapSocket.disconnect(); waitingSocket.disconnect();
   }
 });

@@ -65,7 +65,10 @@ export async function revokeInvitation(restaurantId: string, invitationId: strin
 export async function listRestaurantCouriers(restaurantId: string, status: 'ACTIVE' | 'ENDED' | 'ALL') {
   const affiliations = await db.restaurantCourierAffiliation.findMany({
     where: { restaurantId, ...(status === 'ALL' ? {} : { status }) }, orderBy: [{ status: 'asc' }, { confirmedAt: 'desc' }], take: 200,
-    include: { courier: { include: { user: { select: { phone: true, avatarUrl: true } }, deliveries: { where: { status: { in: ACTIVE_DELIVERY } }, select: { id: true, restaurantId: true } } } } },
+    include: { courier: { include: {
+      user: { select: { phone: true, avatarUrl: true } }, deliveries: { where: { status: { in: ACTIVE_DELIVERY } }, select: { id: true, restaurantId: true } },
+      _count: { select: { affiliations: { where: { status: 'ACTIVE' } } } },
+    } } },
   });
   return affiliations.map(({ courier, ...affiliation }) => {
     const active = courier.deliveries[0];
@@ -73,7 +76,7 @@ export async function listRestaurantCouriers(restaurantId: string, status: 'ACTI
       affiliationId: affiliation.id, status: affiliation.status, invitedAt: affiliation.invitedAt, confirmedAt: affiliation.confirmedAt, endedAt: affiliation.endedAt, endedBy: affiliation.endedBy,
       courier: {
         id: courier.userId, name: `${courier.firstName} ${courier.lastName}`.trim(), phone: courier.user.phone, avatarUrl: courier.user.avatarUrl,
-        workMode: courier.workMode, approvalStatus: courier.approvalStatus, availability: courierAvailability(courier, active?.id ?? null),
+        workMode: courier.workMode, approvalStatus: courier.approvalStatus, availability: courierAvailability(courier, courier._count.affiliations, active?.id ?? null),
         // Only this restaurant's own delivery is identified; another restaurant's is just "busy".
         activeDeliveryId: active?.restaurantId === restaurantId ? active.id : null,
       },

@@ -58,8 +58,11 @@ export function PermissionNotice({ account }: { account: CourierAccount }) {
   return permissions.reason === 'SUSPENDED' ? <Banner tone="danger" icon="shield" text={t('permSUSPENDED')} /> : null;
 }
 
-/** Restaurant invitation: enter the code, see which restaurant it is, then accept or decline. */
-export function InvitationPanel() {
+/**
+ * Restaurant invitation: enter the code, see which restaurant it is, then accept or decline.
+ * `onAccepted` runs after an acceptance (the profile then switches to own-restaurant mode).
+ */
+export function InvitationPanel({ onAccepted }: { onAccepted?: () => Promise<void> } = {}) {
   const { t, colors } = usePrefs();
   const queryClient = useQueryClient();
   const invitations = useQuery({ queryKey: ['invitations'], queryFn: courierApi.invitations });
@@ -70,6 +73,7 @@ export function InvitationPanel() {
   const answer = (invitation: CourierInvitationDto, accept: boolean) => respond.run(async () => {
     if (accept) await courierApi.acceptInvitation(invitation.id); else await courierApi.rejectInvitation(invitation.id);
     await refresh();
+    if (accept && onAccepted) await onAccepted();
   });
   return (
     <View style={{ gap: 12 }}>

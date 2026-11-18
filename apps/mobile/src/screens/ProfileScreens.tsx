@@ -11,7 +11,7 @@ import { useSession } from '../session';
 import { useAccount, useActiveDelivery } from '../hooks';
 import { cityName, dateTime } from '../lib/format';
 import { Icon } from '../ui/Icon';
-import { AppText, Badge, Banner, Button, Card, ConfirmDialog, EmptyState, Field, QueryState, Row, Screen, Segmented } from '../ui/kit';
+import { AppText, Badge, Banner, Button, Card, ConfirmDialog, Dialog, EmptyState, Field, QueryState, Row, Screen, Segmented } from '../ui/kit';
 import { Avatar, CityPicker, FacePhotoField, InvitationPanel, PassportFields, PermissionNotice, useAction, validPassport } from './shared';
 import { validPhone } from './AuthScreens';
 import type { RootStackParams } from '../navigation';
@@ -29,7 +29,19 @@ export function ProfileScreen() {
   const active = useActiveDelivery();
   const profile = account.profile;
   const [confirm, setConfirm] = useState<null | { kind: 'logout' } | { kind: 'mode'; mode: CourierWorkMode }>(null);
+  const [askCode, setAskCode] = useState(false);
   const action = useAction();
+  const chooseMode = (mode: CourierWorkMode) => {
+    if (mode === profile.workMode) return;
+    // Own-restaurant mode starts with the code of the restaurant that hired the courier.
+    if (mode === 'RESTAURANT' && account.activeAffiliations === 0) setAskCode(true);
+    else setConfirm({ kind: 'mode', mode });
+  };
+  const switchToRestaurant = async () => {
+    queryClient.setQueryData(['me'], await courierApi.setWorkMode('RESTAURANT'));
+    setAskCode(false);
+    await Promise.all(['offers', 'map'].map(key => queryClient.invalidateQueries({ queryKey: [key] })));
+  };
   // Preferences are applied at once and saved to the account so every device shows the same.
   const savePrefs = (next: { language?: Language; theme?: Theme }) => {
     if (next.language) setLanguage(next.language);
@@ -53,7 +65,7 @@ export function ProfileScreen() {
 
       <Card>
         <AppText variant="label" muted>{t('workMode')}</AppText>
-        <Segmented value={profile.workMode ?? 'RESTAURANT'} onChange={mode => { if (mode !== profile.workMode) setConfirm({ kind: 'mode', mode }); }}
+        <Segmented value={profile.workMode ?? 'RESTAURANT'} onChange={chooseMode}
           options={[{ value: 'RESTAURANT', label: t('modeRESTAURANT') }, { value: 'FREELANCE', label: t('modeFREELANCE') }]} />
       </Card>
 
@@ -83,6 +95,10 @@ export function ProfileScreen() {
       <ConfirmDialog visible={confirm?.kind === 'mode'} title={t('workMode')} message={t('modeConfirm')} busy={action.busy}
         onCancel={() => setConfirm(null)}
         onConfirm={() => void action.run(async () => { if (confirm?.kind === 'mode') queryClient.setQueryData(['me'], await courierApi.setWorkMode(confirm.mode)); setConfirm(null); await queryClient.invalidateQueries({ queryKey: ['offers'] }); }).then(() => setConfirm(null))} />
+      <Dialog visible={askCode} title={t('modeCodeTitle')} message={t('modeCodeText')} onClose={() => setAskCode(false)}>
+        {askCode ? <InvitationPanel onAccepted={switchToRestaurant} /> : null}
+        <Button title={t('cancel')} variant="secondary" onPress={() => setAskCode(false)} />
+      </Dialog>
     </Screen>
   );
 }

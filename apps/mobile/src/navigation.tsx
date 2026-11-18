@@ -6,6 +6,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { usePrefs } from './prefs';
 import { useSession } from './session';
 import { RealtimeProvider } from './realtime';
+import { LocationProvider } from './location';
 import { useAccount, useOffers } from './hooks';
 import { Icon, type IconName } from './ui/Icon';
 import { AppText, Banner, Button, Screen } from './ui/kit';
@@ -63,7 +64,10 @@ function SignedIn() {
     return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg }}><ActivityIndicator color={colors.accent} /></View>;
   }
   const header = { headerTintColor: colors.text, headerStyle: { backgroundColor: colors.bg }, headerTitleStyle: { color: colors.text }, headerShadowVisible: false, contentStyle: { backgroundColor: colors.bg } };
+  // Only a verified courier who finished onboarding is asked for location (orders within 5 km).
+  const reportLocation = account.data.profile.onboardingCompleted && account.data.profile.availability !== 'UNAVAILABLE';
   return (
+    <LocationProvider enabled={reportLocation}>
     <Stack.Navigator screenOptions={{ ...header, headerBackButtonDisplayMode: 'minimal' }}>
       {account.data.profile.onboardingCompleted ? (
         <>
@@ -79,6 +83,7 @@ function SignedIn() {
       ) : <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />}
       <Stack.Screen name="Server" component={ServerScreen} options={{ title: t('serverTitle') }} />
     </Stack.Navigator>
+    </LocationProvider>
   );
 }
 

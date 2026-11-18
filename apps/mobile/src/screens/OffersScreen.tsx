@@ -8,11 +8,12 @@ import { AppError, asAppError } from '../api/client';
 import { courierApi } from '../api/courier';
 import { usePrefs } from '../prefs';
 import { useConnectivity } from '../realtime';
-import { useNow, useOffers } from '../hooks';
+import { useAccount, useNow, useOffers } from '../hooks';
 import { countdown, money, zoneName } from '../lib/format';
 import { Icon } from '../ui/Icon';
-import { AppText, Badge, Banner, Button, Card, ConfirmDialog, EmptyState, QueryState, Screen } from '../ui/kit';
+import { AppText, Badge, Banner, Button, Card, ConfirmDialog, QueryState, Screen } from '../ui/kit';
 import { ConnectionBanner } from './shared';
+import { NearbyOrders } from './NearbyOrders';
 import type { RootStackParams } from '../navigation';
 
 type Nav = NativeStackNavigationProp<RootStackParams>;
@@ -25,6 +26,8 @@ export function OffersScreen() {
   const { online, realtime } = useConnectivity();
   const queryClient = useQueryClient();
   const offers = useOffers();
+  // Without verification for the current mode there are no offers to wait for: say so instead.
+  const verified = useAccount().data?.profile.availability !== 'UNAVAILABLE';
   const now = useNow();
   const [pending, setPending] = useState<Record<string, Pending>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -81,10 +84,11 @@ export function OffersScreen() {
   const items = offers.data?.items ?? [];
   return (
     <Screen refreshing={offers.isFetching} onRefresh={() => void offers.refetch()}>
-      <AppText variant="title">{t('offersTitle')}</AppText>
+      <AppText variant="title">{t('tabOffers')}</AppText>
       <ConnectionBanner />
+      <NearbyOrders />
+      {verified && items.length ? <AppText variant="heading">{t('offersTitle')}</AppText> : null}
       <QueryState loading={offers.isPending} error={offers.isError && !offers.data ? offers.error : null} onRetry={() => void offers.refetch()}>
-        {!items.length ? <EmptyState icon="orders" text={t('homeNoOffers')} /> : null}
         {items.map(offer => {
           const secondsLeft = Math.floor((Date.parse(offer.expiresAt) - (now + offset)) / 1000);
           const expired = secondsLeft <= 0;

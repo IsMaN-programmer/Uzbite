@@ -13,16 +13,17 @@ export const ru = {
   passportSeries: 'Серия', passportNumber: 'Номер паспорта', passportHint: 'Паспорт или ID-карта: 2 латинские буквы и 7 цифр, например AA 1234567', passportSeriesInvalid: '2 буквы', passportNumberInvalid: '7 цифр',
   facePhoto: 'Фото лица', facePhotoHint: 'Сделайте селфи при хорошем освещении: лицо целиком, без очков и головного убора.', facePhotoTake: 'Сделать фото', facePhotoRetake: 'Переснять', facePhotoGallery: 'Выбрать из галереи', facePhotoReady: 'Фото загружено', facePhotoUploading: 'Загружаем фото…',
   cameraDenied: 'Нет доступа к камере. Разрешите его в настройках телефона или выберите фото из галереи.', identityLocked: 'Паспорт и фото проверены UzBite. Чтобы изменить их, обратитесь в поддержку.',
-  onbMode: 'Режим работы', onbSetup: 'Подключение', onbDone: 'Готово', onbDoneText: 'Аккаунт настроен. Включите доступность на главном экране, чтобы получать предложения.', onbFinish: 'Начать работу',
+  onbMode: 'Режим работы', onbSetup: 'Подключение', onbDone: 'Готово', onbDoneText: 'Аккаунт настроен. Предложения заказов будут приходить на главный экран.', onbFinish: 'Начать работу',
   modeRESTAURANT: 'Свой ресторан', modeRESTAURANTText: 'Доставляете заказы ресторана, который пригласил вас по коду.', modeFREELANCE: 'Свободные доставки', modeFREELANCEText: 'Получаете заказы ресторанов вашего города.',
   inviteTitle: 'Код приглашения ресторана', inviteHint: 'Код из 8 символов выдаёт ресторан, например AB3K-7QXZ', inviteClaim: 'Проверить код', inviteFrom: 'Приглашение от ресторана «{name}»', inviteAccept: 'Принять', inviteReject: 'Отклонить', inviteLinked: 'Вы работаете с рестораном «{name}»',
-  areaTitle: 'Город работы', areaCity: 'Город работы', areaHint: 'Предложения приходят от ресторанов выбранного города. Ваше местоположение не отслеживается.',
+  areaTitle: 'Город работы', areaCity: 'Город работы', areaHint: 'Город нужен для свободных доставок ресторанов. Заказы рядом подбираются по вашему местоположению, пока приложение открыто.',
   approvalAPPROVED: 'Допущен к свободным доставкам', approvalSUSPENDED: 'Аккаунт заблокирован',
   permSUSPENDED: 'Аккаунт заблокирован. Обратитесь в поддержку.',
 
   tabHome: 'Главная', tabOffers: 'Заказы', tabHistory: 'История', tabProfile: 'Профиль',
   statusAVAILABLE: 'Доступен', statusUNAVAILABLE: 'Недоступен', statusBUSY: 'Занят', statusOFFLINE: 'Нет соединения',
-  homeAvailability: 'Принимаю заказы', homeBusy: 'Пока идёт доставка, новые предложения не приходят.', homeActive: 'Активная доставка', homeOffers: 'Новые предложения', homeNoOffers: 'Новых предложений нет', homeToday: 'Сегодня', homeDelivered: 'Доставок', homeAccrued: 'Начислено', homeEarnings: 'Заработок',
+  verifiedOnly: 'Заказы может брать только верифицированный курьер.', mapHint: 'Рестораны, которые сейчас ищут курьера', homeBusy: 'Пока идёт доставка, новые предложения не приходят.', homeActive: 'Активная доставка', homeOffers: 'Новые предложения', homeNoOffers: 'Новых предложений нет', homeToday: 'Сегодня', homeDelivered: 'Доставок', homeAccrued: 'Начислено', homeEarnings: 'Заработок',
+  nearbyTitle: 'Заказы рядом · до {km} км', nearbyEmpty: 'Рядом пока нет заказов. Список обновляется сам.', nearbyKm: '{km} км от вас', takeOrder: 'Взять заказ', locating: 'Определяем ваше местоположение…', locationNeeded: 'Чтобы видеть заказы рядом, разрешите доступ к геолокации.', locationAllow: 'Разрешить', buildRoute: 'Построить маршрут', deliveryElapsed: 'В работе {time}', coordinates: 'Координаты: {v}', errTOO_FAR: 'Заказ дальше 5 км от вас', errLOCATION_REQUIRED: 'Разрешите доступ к геолокации, чтобы брать заказы рядом', errORDER_UNAVAILABLE: 'Заказ больше недоступен', errNOT_AFFILIATED: 'Это заказ другого ресторана',
   mapTitle: 'Карта ресторанов', mapOpen: 'Открыть карту ресторанов', mapWaiting: 'Ждут курьера: {n}', mapEmpty: 'Сейчас ни один ресторан не ищет курьера. Карта обновится сама.', mapOffers: 'К предложениям', mapFailed: 'Карта не загрузилась, рестораны показаны списком.', mapKeyMissing: 'Для разработчика: укажите EXPO_PUBLIC_YANDEX_MAPS_API_KEY в apps/mobile/.env и перезапустите Expo.',
 
   offersTitle: 'Предложения', offersLeft: 'Осталось {time}', offersExpired: 'Время вышло',
@@ -44,14 +45,14 @@ export const ru = {
   deliveryDone: 'Доставка завершена', deliveryReleased: 'Эта доставка больше не назначена вам', noActive: 'Активной доставки нет',
   rewardLine: 'Вознаграждение: {sum} · {status}', rewardNONE: 'нет', rewardACCRUED: 'начислено', rewardCONFIRMED: 'подтверждено', rewardPAID: 'выплачено',
 
-  historyTitle: 'История', fAll: 'Все', fCompleted: 'Завершённые', fCancelled: 'Отменённые', fRestaurant: 'Свой ресторан', fFreelance: 'Свободные',
+  historyTitle: 'История', historyFilter: 'Фильтр истории', fAll: 'Все', fCompleted: 'Завершённые', fCancelled: 'Отменённые', fRestaurant: 'Свой ресторан', fFreelance: 'Свободные',
   outDELIVERED: 'Доставлено', outCANCELLED: 'Отменено', outFAILED: 'Не доставлено', outIN_PROGRESS: 'В работе', historyEmpty: 'Здесь появятся ваши доставки',
 
   earningsTitle: 'Заработок', eAccrued: 'Начислено', eConfirmed: 'Подтверждено рестораном', ePaid: 'Выплачено', ePending: 'Ожидает выплаты', eCompleted: 'Доставок завершено', eWithout: 'Без вознаграждения', eToday: 'Сегодня: {n} дост., {sum}',
   eNote: 'Суммы по данным ресторанов. «Выплачено» означает, что ресторан отметил выплату. UzBite деньги не переводит.',
 
   profileTitle: 'Профиль', personal: 'Личные данные', edit: 'Изменить', workMode: 'Режим работы', restaurants: 'Рестораны', workArea: 'Город работы', notifications: 'Уведомления', language: 'Язык', theme: 'Тема', themeLight: 'Светлая', themeDark: 'Тёмная', support: 'Поддержка', logout: 'Выйти', version: 'Версия {v}', server: 'Сервер',
-  logoutConfirm: 'Выйти из аккаунта?', logoutActive: 'У вас есть активная доставка. После выхода обновления перестанут приходить, но доставка останется за вами.', modeConfirm: 'Сменить режим работы? Открытые предложения будут отозваны.',
+  logoutConfirm: 'Выйти из аккаунта?', logoutActive: 'У вас есть активная доставка. После выхода обновления перестанут приходить, но доставка останется за вами.', modeConfirm: 'Сменить режим работы? Открытые предложения будут отозваны.', modeCodeTitle: 'Код ресторана', modeCodeText: 'Чтобы работать в режиме «Свой ресторан», введите код ресторана, который вас нанял.',
   affEnd: 'Прекратить работу', affEndConfirm: 'Прекратить работу с рестораном «{name}»?', affACTIVE: 'Активна', affENDED: 'Завершена', affEmpty: 'Вы пока не привязаны к ресторанам', affAdd: 'Ввести код приглашения',
   pushNote: 'Фоновые push-уведомления в этой версии не поддерживаются: события приходят, пока приложение открыто и есть связь, и сохраняются в разделе «Уведомления».',
 
@@ -60,7 +61,7 @@ export const ru = {
 
   errINVALID_CREDENTIALS: 'Неверная почта или пароль', errEMAIL_TAKEN: 'Эта почта уже зарегистрирована', errOFFER_TAKEN: 'Этот заказ уже принят другим курьером', errOFFER_EXPIRED: 'Время предложения истекло', errOFFER_WITHDRAWN: 'Предложение больше не действует', errOFFER_REJECTED: 'Вы уже отклонили это предложение',
   errCOURIER_BUSY: 'У вас уже есть активная доставка', errNOT_READY: 'Ресторан ещё не отметил заказ готовым', errHANDOFF_CODE_INVALID: 'Неверный код', errHANDOFF_LOCKED: 'Попытки ввода кода исчерпаны. Сообщите о проблеме с кодом', errCASH_NOT_CONFIRMED: 'Сначала подтвердите получение наличных',
-  errMODE_NOT_ALLOWED: 'Этот режим пока недоступен для вашего аккаунта', errCOURIER_SUSPENDED: 'Аккаунт курьера заблокирован', errSERVICE_AREA_REQUIRED: 'Выберите город работы', errONBOARDING_INCOMPLETE: 'Сначала завершите настройку аккаунта', errWORK_MODE_REQUIRED: 'Выберите режим работы', errAFFILIATION_REQUIRED: 'Введите код приглашения ресторана и примите его',
+  errMODE_NOT_ALLOWED: 'Этот режим пока недоступен для вашего аккаунта', errCOURIER_SUSPENDED: 'Аккаунт курьера заблокирован', errSERVICE_AREA_REQUIRED: 'Выберите город работы', errONBOARDING_INCOMPLETE: 'Сначала завершите настройку аккаунта', errWORK_MODE_REQUIRED: 'Выберите режим работы', errAFFILIATION_REQUIRED: 'Введите код ресторана, который вас нанял, и примите приглашение',
   errINVITATION_INVALID: 'Код недействителен, истёк или уже использован', errINVITATION_CODE_FORMAT: 'Код состоит из 8 символов', errALREADY_AFFILIATED: 'Вы уже работаете с этим рестораном', errACTIVE_DELIVERY: 'Сначала завершите текущую доставку этого ресторана', errRATE_LIMIT: 'Слишком много попыток. Подождите немного',
   errPASSPORT_TAKEN: 'Этот паспорт уже указан в другом аккаунте курьера', errIDENTITY_LOCKED: 'Паспорт и фото уже проверены. Для изменения обратитесь в поддержку', errIDENTITY_REQUIRED: 'Укажите паспорт и сделайте фото лица', errPERSONAL_DATA_REQUIRED: 'Заполните имя и фамилию',
   errFILE_TYPE: 'Нужна фотография в формате JPEG, PNG или WebP', errFILE_TOO_LARGE: 'Фото слишком большое', errUPLOAD_INVALID: 'Не удалось загрузить фото. Попробуйте ещё раз', errSTORAGE_NOT_CONFIGURED: 'Хранилище фото на сервере не настроено',
@@ -82,16 +83,17 @@ export const uz: Record<TextKey, string> = {
   passportSeries: 'Seriya', passportNumber: 'Pasport raqami', passportHint: 'Pasport yoki ID-karta: 2 ta lotin harfi va 7 ta raqam, masalan AA 1234567', passportSeriesInvalid: '2 ta harf', passportNumberInvalid: '7 ta raqam',
   facePhoto: 'Yuz surati', facePhotoHint: 'Yaxshi yorug‘likda selfi qiling: yuz to‘liq, ko‘zoynak va bosh kiyimsiz.', facePhotoTake: 'Suratga olish', facePhotoRetake: 'Qayta suratga olish', facePhotoGallery: 'Galereyadan tanlash', facePhotoReady: 'Surat yuklandi', facePhotoUploading: 'Surat yuklanmoqda…',
   cameraDenied: 'Kameraga ruxsat yo‘q. Telefon sozlamalarida ruxsat bering yoki galereyadan surat tanlang.', identityLocked: 'Pasport va surat UzBite tomonidan tekshirilgan. O‘zgartirish uchun qo‘llab-quvvatlash xizmatiga murojaat qiling.',
-  onbMode: 'Ish rejimi', onbSetup: 'Ulanish', onbDone: 'Tayyor', onbDoneText: 'Akkaunt sozlandi. Takliflarni olish uchun bosh ekranda mavjudlikni yoqing.', onbFinish: 'Ishni boshlash',
+  onbMode: 'Ish rejimi', onbSetup: 'Ulanish', onbDone: 'Tayyor', onbDoneText: 'Akkaunt sozlandi. Buyurtma takliflari bosh ekranga keladi.', onbFinish: 'Ishni boshlash',
   modeRESTAURANT: 'O‘z restoranim', modeRESTAURANTText: 'Sizni kod orqali taklif qilgan restoran buyurtmalarini yetkazasiz.', modeFREELANCE: 'Erkin yetkazishlar', modeFREELANCEText: 'Shahringizdagi restoranlar buyurtmalarini olasiz.',
   inviteTitle: 'Restoran taklif kodi', inviteHint: '8 belgili kodni restoran beradi, masalan AB3K-7QXZ', inviteClaim: 'Kodni tekshirish', inviteFrom: '«{name}» restoranidan taklif', inviteAccept: 'Qabul qilish', inviteReject: 'Rad etish', inviteLinked: 'Siz «{name}» restorani bilan ishlaysiz',
-  areaTitle: 'Ish shahri', areaCity: 'Ish shahri', areaHint: 'Takliflar tanlangan shahardagi restoranlardan keladi. Joylashuvingiz kuzatilmaydi.',
+  areaTitle: 'Ish shahri', areaCity: 'Ish shahri', areaHint: 'Shahar restoranlarning erkin yetkazishlari uchun kerak. Yaqin buyurtmalar ilova ochiq paytda joylashuvingiz bo‘yicha tanlanadi.',
   approvalAPPROVED: 'Erkin yetkazishlarga ruxsat berilgan', approvalSUSPENDED: 'Akkaunt bloklangan',
   permSUSPENDED: 'Akkaunt bloklangan. Qo‘llab-quvvatlash xizmatiga murojaat qiling.',
 
   tabHome: 'Bosh sahifa', tabOffers: 'Buyurtmalar', tabHistory: 'Tarix', tabProfile: 'Profil',
   statusAVAILABLE: 'Mavjud', statusUNAVAILABLE: 'Mavjud emas', statusBUSY: 'Band', statusOFFLINE: 'Aloqa yo‘q',
-  homeAvailability: 'Buyurtmalarni qabul qilaman', homeBusy: 'Yetkazish davomida yangi takliflar kelmaydi.', homeActive: 'Faol yetkazish', homeOffers: 'Yangi takliflar', homeNoOffers: 'Yangi takliflar yo‘q', homeToday: 'Bugun', homeDelivered: 'Yetkazishlar', homeAccrued: 'Hisoblangan', homeEarnings: 'Daromad',
+  verifiedOnly: 'Buyurtmalarni faqat tasdiqlangan kuryer olishi mumkin.', mapHint: 'Hozir kuryer qidirayotgan restoranlar', homeBusy: 'Yetkazish davomida yangi takliflar kelmaydi.', homeActive: 'Faol yetkazish', homeOffers: 'Yangi takliflar', homeNoOffers: 'Yangi takliflar yo‘q', homeToday: 'Bugun', homeDelivered: 'Yetkazishlar', homeAccrued: 'Hisoblangan', homeEarnings: 'Daromad',
+  nearbyTitle: 'Yaqin buyurtmalar · {km} km gacha', nearbyEmpty: 'Hozircha yaqin atrofda buyurtma yo‘q. Ro‘yxat o‘zi yangilanadi.', nearbyKm: 'sizdan {km} km', takeOrder: 'Buyurtmani olish', locating: 'Joylashuvingiz aniqlanmoqda…', locationNeeded: 'Yaqin buyurtmalarni ko‘rish uchun geolokatsiyaga ruxsat bering.', locationAllow: 'Ruxsat berish', buildRoute: 'Marshrut qurish', deliveryElapsed: 'Ishda {time}', coordinates: 'Koordinatalar: {v}', errTOO_FAR: 'Buyurtma sizdan 5 km dan uzoqda', errLOCATION_REQUIRED: 'Yaqin buyurtmalarni olish uchun geolokatsiyaga ruxsat bering', errORDER_UNAVAILABLE: 'Buyurtma endi mavjud emas', errNOT_AFFILIATED: 'Bu boshqa restoranning buyurtmasi',
   mapTitle: 'Restoranlar xaritasi', mapOpen: 'Restoranlar xaritasini ochish', mapWaiting: 'Kuryer kutmoqda: {n}', mapEmpty: 'Hozir hech bir restoran kuryer qidirmayapti. Xarita o‘zi yangilanadi.', mapOffers: 'Takliflarga', mapFailed: 'Xarita yuklanmadi, restoranlar ro‘yxat ko‘rinishida.', mapKeyMissing: 'Dasturchi uchun: apps/mobile/.env faylida EXPO_PUBLIC_YANDEX_MAPS_API_KEY ni ko‘rsating va Expo’ni qayta ishga tushiring.',
 
   offersTitle: 'Takliflar', offersLeft: '{time} qoldi', offersExpired: 'Vaqt tugadi',
@@ -113,14 +115,14 @@ export const uz: Record<TextKey, string> = {
   deliveryDone: 'Yetkazish yakunlandi', deliveryReleased: 'Bu yetkazish endi sizga biriktirilmagan', noActive: 'Faol yetkazish yo‘q',
   rewardLine: 'Mukofot: {sum} · {status}', rewardNONE: 'yo‘q', rewardACCRUED: 'hisoblandi', rewardCONFIRMED: 'tasdiqlandi', rewardPAID: 'to‘landi',
 
-  historyTitle: 'Tarix', fAll: 'Hammasi', fCompleted: 'Yakunlangan', fCancelled: 'Bekor qilingan', fRestaurant: 'O‘z restoranim', fFreelance: 'Erkin',
+  historyTitle: 'Tarix', historyFilter: 'Tarix filtri', fAll: 'Hammasi', fCompleted: 'Yakunlangan', fCancelled: 'Bekor qilingan', fRestaurant: 'O‘z restoranim', fFreelance: 'Erkin',
   outDELIVERED: 'Yetkazildi', outCANCELLED: 'Bekor qilindi', outFAILED: 'Yetkazilmadi', outIN_PROGRESS: 'Jarayonda', historyEmpty: 'Bu yerda yetkazishlaringiz paydo bo‘ladi',
 
   earningsTitle: 'Daromad', eAccrued: 'Hisoblangan', eConfirmed: 'Restoran tasdiqlagan', ePaid: 'To‘langan', ePending: 'To‘lov kutilmoqda', eCompleted: 'Yakunlangan yetkazishlar', eWithout: 'Mukofotsiz', eToday: 'Bugun: {n} ta, {sum}',
   eNote: 'Summalar restoranlar ma’lumotlari bo‘yicha. «To‘langan» — restoran to‘lovni belgilaganini bildiradi. UzBite pul o‘tkazmaydi.',
 
   profileTitle: 'Profil', personal: 'Shaxsiy ma’lumotlar', edit: 'O‘zgartirish', workMode: 'Ish rejimi', restaurants: 'Restoranlar', workArea: 'Ish shahri', notifications: 'Bildirishnomalar', language: 'Til', theme: 'Mavzu', themeLight: 'Yorug‘', themeDark: 'Qorong‘i', support: 'Qo‘llab-quvvatlash', logout: 'Chiqish', version: 'Versiya {v}', server: 'Server',
-  logoutConfirm: 'Akkauntdan chiqasizmi?', logoutActive: 'Sizda faol yetkazish bor. Chiqqaningizdan keyin yangilanishlar kelmaydi, lekin yetkazish sizda qoladi.', modeConfirm: 'Ish rejimini o‘zgartirasizmi? Ochiq takliflar qaytarib olinadi.',
+  logoutConfirm: 'Akkauntdan chiqasizmi?', logoutActive: 'Sizda faol yetkazish bor. Chiqqaningizdan keyin yangilanishlar kelmaydi, lekin yetkazish sizda qoladi.', modeConfirm: 'Ish rejimini o‘zgartirasizmi? Ochiq takliflar qaytarib olinadi.', modeCodeTitle: 'Restoran kodi', modeCodeText: '«O‘z restoranim» rejimida ishlash uchun sizni ishga olgan restoran kodini kiriting.',
   affEnd: 'Ishni to‘xtatish', affEndConfirm: '«{name}» restorani bilan ishni to‘xtatasizmi?', affACTIVE: 'Faol', affENDED: 'Yakunlangan', affEmpty: 'Siz hali restoranlarga ulanmagansiz', affAdd: 'Taklif kodini kiritish',
   pushNote: 'Bu versiyada fon push-bildirishnomalari yo‘q: hodisalar ilova ochiq va aloqa bor paytda keladi hamda «Bildirishnomalar» bo‘limida saqlanadi.',
 
@@ -129,7 +131,7 @@ export const uz: Record<TextKey, string> = {
 
   errINVALID_CREDENTIALS: 'Pochta yoki parol noto‘g‘ri', errEMAIL_TAKEN: 'Bu pochta allaqachon ro‘yxatdan o‘tgan', errOFFER_TAKEN: 'Bu buyurtmani boshqa kuryer allaqachon qabul qilgan', errOFFER_EXPIRED: 'Taklif muddati tugadi', errOFFER_WITHDRAWN: 'Taklif endi amal qilmaydi', errOFFER_REJECTED: 'Siz bu taklifni allaqachon rad etgansiz',
   errCOURIER_BUSY: 'Sizda allaqachon faol yetkazish bor', errNOT_READY: 'Restoran hali buyurtmani tayyor deb belgilamagan', errHANDOFF_CODE_INVALID: 'Kod noto‘g‘ri', errHANDOFF_LOCKED: 'Kod kiritish urinishlari tugadi. Kod bilan muammo haqida xabar bering', errCASH_NOT_CONFIRMED: 'Avval naqd pul olinganini tasdiqlang',
-  errMODE_NOT_ALLOWED: 'Bu rejim hozircha akkauntingiz uchun mavjud emas', errCOURIER_SUSPENDED: 'Kuryer akkaunti bloklangan', errSERVICE_AREA_REQUIRED: 'Ish shahrini tanlang', errONBOARDING_INCOMPLETE: 'Avval akkaunt sozlashni yakunlang', errWORK_MODE_REQUIRED: 'Ish rejimini tanlang', errAFFILIATION_REQUIRED: 'Restoran taklif kodini kiriting va qabul qiling',
+  errMODE_NOT_ALLOWED: 'Bu rejim hozircha akkauntingiz uchun mavjud emas', errCOURIER_SUSPENDED: 'Kuryer akkaunti bloklangan', errSERVICE_AREA_REQUIRED: 'Ish shahrini tanlang', errONBOARDING_INCOMPLETE: 'Avval akkaunt sozlashni yakunlang', errWORK_MODE_REQUIRED: 'Ish rejimini tanlang', errAFFILIATION_REQUIRED: 'Sizni ishga olgan restoran kodini kiriting va taklifni qabul qiling',
   errINVITATION_INVALID: 'Kod yaroqsiz, muddati o‘tgan yoki ishlatilgan', errINVITATION_CODE_FORMAT: 'Kod 8 ta belgidan iborat', errALREADY_AFFILIATED: 'Siz bu restoran bilan allaqachon ishlaysiz', errACTIVE_DELIVERY: 'Avval shu restoranning joriy yetkazishini yakunlang', errRATE_LIMIT: 'Urinishlar juda ko‘p. Biroz kuting',
   errPASSPORT_TAKEN: 'Bu pasport boshqa kuryer akkauntida ko‘rsatilgan', errIDENTITY_LOCKED: 'Pasport va surat allaqachon tekshirilgan. O‘zgartirish uchun qo‘llab-quvvatlash xizmatiga murojaat qiling', errIDENTITY_REQUIRED: 'Pasportni kiriting va yuz suratini oling', errPERSONAL_DATA_REQUIRED: 'Ism va familiyani kiriting',
   errFILE_TYPE: 'JPEG, PNG yoki WebP formatidagi surat kerak', errFILE_TOO_LARGE: 'Surat juda katta', errUPLOAD_INVALID: 'Suratni yuklab bo‘lmadi. Qayta urinib ko‘ring', errSTORAGE_NOT_CONFIGURED: 'Serverda surat ombori sozlanmagan',
@@ -150,16 +152,17 @@ export const en: Record<TextKey, string> = {
   passportSeries: 'Series', passportNumber: 'Passport number', passportHint: 'Passport or ID card: 2 Latin letters and 7 digits, e.g. AA 1234567', passportSeriesInvalid: '2 letters', passportNumberInvalid: '7 digits',
   facePhoto: 'Face photo', facePhotoHint: 'Take a selfie in good light: your whole face, no glasses or headwear.', facePhotoTake: 'Take a photo', facePhotoRetake: 'Retake', facePhotoGallery: 'Choose from gallery', facePhotoReady: 'Photo uploaded', facePhotoUploading: 'Uploading the photo…',
   cameraDenied: 'No camera access. Allow it in the phone settings or choose a photo from the gallery.', identityLocked: 'UzBite has checked your passport and photo. Contact support to change them.',
-  onbMode: 'Work mode', onbSetup: 'Connection', onbDone: 'Done', onbDoneText: 'Your account is ready. Turn on availability on the home screen to receive offers.', onbFinish: 'Start working',
+  onbMode: 'Work mode', onbSetup: 'Connection', onbDone: 'Done', onbDoneText: 'Your account is ready. Order offers will arrive on the home screen.', onbFinish: 'Start working',
   modeRESTAURANT: 'Own restaurant', modeRESTAURANTText: 'Deliver orders of the restaurant that invited you with a code.', modeFREELANCE: 'Free deliveries', modeFREELANCEText: 'Receive orders from restaurants in your city.',
   inviteTitle: 'Restaurant invitation code', inviteHint: 'The restaurant gives you an 8-character code, e.g. AB3K-7QXZ', inviteClaim: 'Check code', inviteFrom: 'Invitation from “{name}”', inviteAccept: 'Accept', inviteReject: 'Decline', inviteLinked: 'You work with “{name}”',
-  areaTitle: 'Work city', areaCity: 'Work city', areaHint: 'Offers come from restaurants in the selected city. Your location is not tracked.',
+  areaTitle: 'Work city', areaCity: 'Work city', areaHint: 'The city is used for restaurants’ free deliveries. Orders nearby are matched to your location while the app is open.',
   approvalAPPROVED: 'Approved for free deliveries', approvalSUSPENDED: 'Account suspended',
   permSUSPENDED: 'Your account is suspended. Contact support.',
 
   tabHome: 'Home', tabOffers: 'Orders', tabHistory: 'History', tabProfile: 'Profile',
   statusAVAILABLE: 'Available', statusUNAVAILABLE: 'Unavailable', statusBUSY: 'Busy', statusOFFLINE: 'No connection',
-  homeAvailability: 'Accepting orders', homeBusy: 'No new offers arrive while you are delivering.', homeActive: 'Active delivery', homeOffers: 'New offers', homeNoOffers: 'No new offers', homeToday: 'Today', homeDelivered: 'Deliveries', homeAccrued: 'Accrued', homeEarnings: 'Earnings',
+  verifiedOnly: 'Only a verified courier can take orders.', mapHint: 'Restaurants looking for a courier right now', homeBusy: 'No new offers arrive while you are delivering.', homeActive: 'Active delivery', homeOffers: 'New offers', homeNoOffers: 'No new offers', homeToday: 'Today', homeDelivered: 'Deliveries', homeAccrued: 'Accrued', homeEarnings: 'Earnings',
+  nearbyTitle: 'Orders nearby · within {km} km', nearbyEmpty: 'No orders nearby yet. The list updates by itself.', nearbyKm: '{km} km away', takeOrder: 'Take the order', locating: 'Finding your location…', locationNeeded: 'Allow location access to see orders nearby.', locationAllow: 'Allow', buildRoute: 'Build a route', deliveryElapsed: 'In progress {time}', coordinates: 'Coordinates: {v}', errTOO_FAR: 'The order is more than 5 km away', errLOCATION_REQUIRED: 'Allow location access to take orders nearby', errORDER_UNAVAILABLE: 'The order is no longer available', errNOT_AFFILIATED: 'This order belongs to another restaurant',
   mapTitle: 'Restaurant map', mapOpen: 'Open the restaurant map', mapWaiting: 'Waiting for a courier: {n}', mapEmpty: 'No restaurant is looking for a courier right now. The map updates by itself.', mapOffers: 'Go to offers', mapFailed: 'The map did not load, restaurants are listed instead.', mapKeyMissing: 'For developers: set EXPO_PUBLIC_YANDEX_MAPS_API_KEY in apps/mobile/.env and restart Expo.',
 
   offersTitle: 'Offers', offersLeft: '{time} left', offersExpired: 'Time is up',
@@ -181,14 +184,14 @@ export const en: Record<TextKey, string> = {
   deliveryDone: 'Delivery completed', deliveryReleased: 'This delivery is no longer assigned to you', noActive: 'No active delivery',
   rewardLine: 'Reward: {sum} · {status}', rewardNONE: 'none', rewardACCRUED: 'accrued', rewardCONFIRMED: 'confirmed', rewardPAID: 'paid',
 
-  historyTitle: 'History', fAll: 'All', fCompleted: 'Completed', fCancelled: 'Cancelled', fRestaurant: 'Own restaurant', fFreelance: 'Free deliveries',
+  historyTitle: 'History', historyFilter: 'History filter', fAll: 'All', fCompleted: 'Completed', fCancelled: 'Cancelled', fRestaurant: 'Own restaurant', fFreelance: 'Free deliveries',
   outDELIVERED: 'Delivered', outCANCELLED: 'Cancelled', outFAILED: 'Not delivered', outIN_PROGRESS: 'In progress', historyEmpty: 'Your deliveries will appear here',
 
   earningsTitle: 'Earnings', eAccrued: 'Accrued', eConfirmed: 'Confirmed by restaurants', ePaid: 'Paid', ePending: 'Awaiting payment', eCompleted: 'Deliveries completed', eWithout: 'Without reward', eToday: 'Today: {n} deliveries, {sum}',
   eNote: 'Amounts are as reported by restaurants. “Paid” means the restaurant marked the payment. UzBite does not transfer money.',
 
   profileTitle: 'Profile', personal: 'Personal details', edit: 'Edit', workMode: 'Work mode', restaurants: 'Restaurants', workArea: 'Work city', notifications: 'Notifications', language: 'Language', theme: 'Theme', themeLight: 'Light', themeDark: 'Dark', support: 'Support', logout: 'Sign out', version: 'Version {v}', server: 'Server',
-  logoutConfirm: 'Sign out?', logoutActive: 'You have an active delivery. After signing out you will not get updates, but the delivery stays yours.', modeConfirm: 'Change the work mode? Open offers will be withdrawn.',
+  logoutConfirm: 'Sign out?', logoutActive: 'You have an active delivery. After signing out you will not get updates, but the delivery stays yours.', modeConfirm: 'Change the work mode? Open offers will be withdrawn.', modeCodeTitle: 'Restaurant code', modeCodeText: 'To work in the own-restaurant mode, enter the code of the restaurant that hired you.',
   affEnd: 'Stop working', affEndConfirm: 'Stop working with “{name}”?', affACTIVE: 'Active', affENDED: 'Ended', affEmpty: 'You are not linked to any restaurant yet', affAdd: 'Enter an invitation code',
   pushNote: 'Background push notifications are not supported in this version: events arrive while the app is open and online, and stay in Notifications.',
 
@@ -197,7 +200,7 @@ export const en: Record<TextKey, string> = {
 
   errINVALID_CREDENTIALS: 'Wrong email or password', errEMAIL_TAKEN: 'This email is already registered', errOFFER_TAKEN: 'Another courier has already accepted this order', errOFFER_EXPIRED: 'The offer has expired', errOFFER_WITHDRAWN: 'The offer is no longer valid', errOFFER_REJECTED: 'You already declined this offer',
   errCOURIER_BUSY: 'You already have an active delivery', errNOT_READY: 'The restaurant has not marked the order ready yet', errHANDOFF_CODE_INVALID: 'Wrong code', errHANDOFF_LOCKED: 'No code attempts left. Report a problem with the code', errCASH_NOT_CONFIRMED: 'Confirm the cash payment first',
-  errMODE_NOT_ALLOWED: 'This mode is not available for your account yet', errCOURIER_SUSPENDED: 'The courier account is suspended', errSERVICE_AREA_REQUIRED: 'Choose your work city', errONBOARDING_INCOMPLETE: 'Finish the account setup first', errWORK_MODE_REQUIRED: 'Choose a work mode', errAFFILIATION_REQUIRED: 'Enter and accept a restaurant invitation code',
+  errMODE_NOT_ALLOWED: 'This mode is not available for your account yet', errCOURIER_SUSPENDED: 'The courier account is suspended', errSERVICE_AREA_REQUIRED: 'Choose your work city', errONBOARDING_INCOMPLETE: 'Finish the account setup first', errWORK_MODE_REQUIRED: 'Choose a work mode', errAFFILIATION_REQUIRED: 'Enter the code of the restaurant that hired you and accept the invitation',
   errINVITATION_INVALID: 'The code is invalid, expired or already used', errINVITATION_CODE_FORMAT: 'The code has 8 characters', errALREADY_AFFILIATED: 'You already work with this restaurant', errACTIVE_DELIVERY: 'Finish this restaurant’s current delivery first', errRATE_LIMIT: 'Too many attempts. Please wait a little',
   errPASSPORT_TAKEN: 'This passport is already used by another courier account', errIDENTITY_LOCKED: 'Your passport and photo are already checked. Contact support to change them', errIDENTITY_REQUIRED: 'Enter your passport and take a face photo', errPERSONAL_DATA_REQUIRED: 'Enter your first and last name',
   errFILE_TYPE: 'A JPEG, PNG or WebP photo is needed', errFILE_TOO_LARGE: 'The photo is too large', errUPLOAD_INVALID: 'Could not upload the photo. Try again', errSTORAGE_NOT_CONFIGURED: 'Photo storage is not configured on the server',

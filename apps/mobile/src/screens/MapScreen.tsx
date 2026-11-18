@@ -14,7 +14,7 @@ import { ConnectionBanner, StatusPill } from './shared';
 import type { RootStackParams } from '../navigation';
 
 /**
- * Opens after «Принимаю заказы» is switched on: restaurants waiting for a courier, on a Yandex map
+ * Opens from the home screen of a verified courier: restaurants waiting for a courier, on a Yandex map
  * and as a list (the list is also the fallback without a map key or network to Yandex).
  */
 export function MapScreen() {

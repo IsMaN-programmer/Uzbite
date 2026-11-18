@@ -4,8 +4,8 @@ import type { ServiceCityCode } from '@uzbite/shared';
 /**
  * Routes in Yandex Maps from coordinates stored in PostgreSQL (official URL scheme:
  * yandex.ru/dev/yandex-apps-launch-maps). `rtext` takes "latitude,longitude"; an empty start
- * (`~lat,lon`) lets Yandex Maps route from the phone's own position — the courier app itself
- * never reads or sends GPS. `rtt` is omitted so Maps keeps the courier's last travel mode.
+ * (`~lat,lon`) lets Yandex Maps route from the phone's own position (Yandex Maps reads the phone’s
+ * position itself). `rtt` is omitted so Maps keeps the courier's last travel mode.
  * The Yandex Maps app is tried first; without it the web version opens in the browser.
  */
 export type Point = { latitude: number; longitude: number };

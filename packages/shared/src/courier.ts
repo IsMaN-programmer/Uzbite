@@ -74,7 +74,11 @@ export interface CourierProfileDto {
   approvalStatus: CourierApprovalStatus;
   isTestAccount: boolean;
   workMode: CourierWorkMode | null;
-  isAvailable: boolean;
+  /**
+   * Computed by the server; there is no switch. AVAILABLE: permitted for the current mode (restaurant
+   * link, or UzBite approval and a city) and receiving offers. BUSY: has an accepted delivery.
+   * UNAVAILABLE: not verified for the current mode or blocked — the app says only a verified courier takes orders.
+   */
   availability: CourierAvailability;
   /** City for free deliveries; null until the courier chooses one. */
   city: string | null;
@@ -193,6 +197,27 @@ export interface CourierMapRestaurant extends RestaurantBrief {
   /** Open offers to this courier from this restaurant; they are accepted on the offers screen. */
   offerIds: string[];
 }
+/**
+ * An open order whose restaurant is within `radiusKm` of the courier's last reported position
+ * (GET /api/courier/nearby-orders). No customer data until the courier takes it.
+ */
+export interface CourierNearbyOrder {
+  orderId: string;
+  number: string;
+  status: OrderStatus;
+  createdAt: string;
+  restaurant: RestaurantBrief & { latitude: number; longitude: number };
+  /** Straight-line distance from the courier to the restaurant. */
+  distanceKm: number;
+  itemCount: number;
+  total: Money;
+  paymentMethod: PaymentMethod | null;
+  /** What the courier gets: the delivery fee paid by the customer. */
+  reward: Money | null;
+}
+/** `located: false` = no fresh position from the app yet (then `items` is empty). */
+export interface CourierNearbyOrders { items: CourierNearbyOrder[]; located: boolean; radiusKm: number }
+
 /** `city` is the courier's work city (null until chosen); free searches are matched by it. */
 export interface CourierMap { city: string | null; restaurants: CourierMapRestaurant[] }
 /** Payload of `courier:map_updated`: something changed at this restaurant, re-read GET /api/courier/map. */

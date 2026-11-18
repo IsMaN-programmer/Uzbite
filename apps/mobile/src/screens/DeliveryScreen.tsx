@@ -8,7 +8,8 @@ import { asAppError } from '../api/client';
 import { courierApi } from '../api/courier';
 import { usePrefs } from '../prefs';
 import { useConnectivity } from '../realtime';
-import { money, time } from '../lib/format';
+import { countdown, money, time } from '../lib/format';
+import { useNow } from '../hooks';
 import { callPhone, openRoute, pointOf } from '../lib/maps';
 import { Icon } from '../ui/Icon';
 import { AppText, Badge, Banner, Button, Card, ConfirmDialog, QueryState, Screen } from '../ui/kit';
@@ -18,6 +19,21 @@ import type { RootStackParams } from '../navigation';
 type Dialog = 'pickup' | 'start' | 'cash' | 'complete' | 'release' | 'requestCancel' | 'codeProblem';
 const STEPS: DeliveryStatus[] = ['ASSIGNED', 'READY_FOR_PICKUP', 'PICKED_UP', 'ON_THE_WAY', 'DELIVERED'];
 const ACTIVE: DeliveryStatus[] = ['ASSIGNED', 'READY_FOR_PICKUP', 'PICKED_UP', 'ON_THE_WAY'];
+
+/** Time since the courier took the order, ticking every second (device clock; a display only). */
+function Elapsed({ since }: { since: string }) {
+  const { t, colors } = usePrefs();
+  const now = useNow();
+  const seconds = Math.max(0, Math.floor((now - Date.parse(since)) / 1000));
+  const hours = Math.floor(seconds / 3600);
+  const clock = hours ? `${hours}:${countdown(seconds % 3600).padStart(5, '0')}` : countdown(seconds);
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+      <Icon name="clock" color={colors.accentText} size={16} />
+      <AppText variant="label" color={colors.accentText}>{t('deliveryElapsed', { time: clock })}</AppText>
+    </View>
+  );
+}
 
 export function DeliveryScreen() {
   const { params } = useRoute<RouteProp<RootStackParams, 'Delivery'>>();
@@ -83,6 +99,8 @@ export function DeliveryScreen() {
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <Badge tone={data.status === 'DELIVERED' ? 'success' : active ? 'accent' : 'danger'} text={t(`ds${data.status}`)} />
         {data.mode ? <Badge text={t(`offersMode${data.mode}`)} /> : null}
+        <View style={{ flex: 1 }} />
+        {active && data.assignedAt ? <Elapsed since={data.assignedAt} /> : null}
       </View>
       {stepIndex >= 0 ? (
         <View style={{ flexDirection: 'row', gap: 6 }} accessibilityLabel={t(`ds${data.status}`)}>
@@ -103,8 +121,10 @@ export function DeliveryScreen() {
         <AppText variant="heading">{data.restaurant.name}</AppText>
         <AppText selectable>{data.restaurant.addressText}</AppText>
         {active ? <Badge tone={data.readyAt ? 'success' : 'warning'} text={data.readyAt ? t('isReady') : t('waitReady')} /> : null}
+        {restaurantPoint ? <AppText variant="caption" muted selectable>{t('coordinates', { v: `${restaurantPoint.latitude.toFixed(6)}, ${restaurantPoint.longitude.toFixed(6)}` })}</AppText> : null}
+        {/* «Построить маршрут»: Yandex Maps (app, else the website) with the order's point — the restaurant. */}
         {active ? (restaurantPoint
-          ? <Button title={t('routeRestaurant')} icon="map" variant="secondary" onPress={() => void openRoute(restaurantPoint)} />
+          ? <Button title={t('buildRoute')} icon="map" variant={data.pickedUpAt ? 'secondary' : 'primary'} onPress={() => void openRoute(restaurantPoint)} />
           : <AppText variant="caption" muted>{t('noCoordinates')}</AppText>) : null}
         {active && data.restaurant.phone ? <Button title={`${t('call')} · ${data.restaurant.phone}`} icon="phone" variant="ghost" onPress={() => void callPhone(data.restaurant.phone!)} /> : null}
       </Card>
