@@ -9,10 +9,10 @@ import { allowCustomServer, appVersion, serverConfig } from '../config';
 import { usePrefs } from '../prefs';
 import { useSession } from '../session';
 import { useAccount, useActiveDelivery } from '../hooks';
-import { dateTime, zoneName } from '../lib/format';
+import { cityName, dateTime } from '../lib/format';
 import { Icon } from '../ui/Icon';
 import { AppText, Badge, Banner, Button, Card, ConfirmDialog, EmptyState, Field, QueryState, Row, Screen, Segmented } from '../ui/kit';
-import { Avatar, InvitationPanel, PermissionNotice, ZonePicker, useAction } from './shared';
+import { Avatar, CityPicker, FacePhotoField, InvitationPanel, PassportFields, PermissionNotice, useAction, validPassport } from './shared';
 import { validPhone } from './AuthScreens';
 import type { RootStackParams } from '../navigation';
 
@@ -59,7 +59,7 @@ export function ProfileScreen() {
       <Card>
         <Row icon="user" label={t('personal')} value={`${profile.firstName} ${profile.lastName}`} onPress={() => navigation.navigate('Personal')} />
         <Row icon="restaurant" label={t('restaurants')} value={String(account.activeAffiliations)} onPress={() => navigation.navigate('Affiliations')} />
-        <Row icon="location" label={t('workArea')} value={profile.serviceZone ? zoneName(profile.serviceZone, language) : '—'} onPress={() => navigation.navigate('ServiceArea')} />
+        <Row icon="location" label={t('workArea')} value={profile.city ? cityName(profile.city, language) : '—'} onPress={() => navigation.navigate('ServiceArea')} />
         <Row icon="notifications" label={t('notifications')} onPress={() => navigation.navigate('Notifications')} />
         <Row icon="wallet" label={t('earningsTitle')} onPress={() => navigation.navigate('Earnings')} />
         <Row icon="telegram" label={t('support')} value="t.me/skillworkdiscussion" onPress={() => void Linking.openURL(SUPPORT_URL)} />
@@ -91,18 +91,24 @@ export function PersonalScreen() {
   const { t } = usePrefs();
   const queryClient = useQueryClient();
   const account = useAccount().data!;
+  const { identity } = account.profile;
   const [first, setFirst] = useState(account.profile.firstName), [last, setLast] = useState(account.profile.lastName), [phone, setPhone] = useState(account.phone ?? '');
+  const [series, setSeries] = useState(identity.passportSeries ?? ''), [number, setNumber] = useState(identity.passportNumber ?? '');
   const action = useAction();
-  const valid = first.trim() && last.trim() && validPhone(phone);
+  const passportTouched = Boolean(series || number);
+  const valid = first.trim() && last.trim() && validPhone(phone) && (!passportTouched || validPassport(series, number));
   return (
     <Screen edges={['bottom']}>
       <Field label={t('firstName')} value={first} onChangeText={setFirst} maxLength={60} />
       <Field label={t('lastName')} value={last} onChangeText={setLast} maxLength={60} />
       <Field label={t('phone')} value={phone} onChangeText={setPhone} keyboardType="phone-pad" error={phone && !validPhone(phone) ? t('phoneInvalid') : undefined} />
       <Field label={t('email')} value={account.email ?? ''} editable={false} />
+      <PassportFields series={series} number={number} onSeries={setSeries} onNumber={setNumber} editable={!identity.locked} />
+      <FacePhotoField account={account} />
       {action.error ? <Banner tone="danger" text={action.error} /> : null}
       <Button title={t('save')} disabled={!valid} loading={action.busy} onPress={() => void action.run(async () => {
-        queryClient.setQueryData(['me'], await courierApi.updateProfile({ firstName: first.trim(), lastName: last.trim(), phone: phone.trim() }));
+        const passport = !identity.locked && passportTouched ? { passportSeries: series, passportNumber: number } : {};
+        queryClient.setQueryData(['me'], await courierApi.updateProfile({ firstName: first.trim(), lastName: last.trim(), phone: phone.trim(), ...passport }));
         navigation.goBack();
       })} />
     </Screen>
@@ -149,18 +155,18 @@ export function ServiceAreaScreen() {
   const { t } = usePrefs();
   const queryClient = useQueryClient();
   const account = useAccount().data!;
-  const [zone, setZone] = useState<string | null>(account.profile.serviceZone);
+  const [city, setCity] = useState<string | null>(account.profile.city);
   const action = useAction();
   return (
     <Screen edges={['bottom']} footer={
-      <Button title={t('save')} disabled={!zone || zone === account.profile.serviceZone} loading={action.busy} onPress={() => void action.run(async () => {
-        if (zone) queryClient.setQueryData(['me'], await courierApi.setServiceArea('tashkent', zone));
+      <Button title={t('save')} disabled={!city || city === account.profile.city} loading={action.busy} onPress={() => void action.run(async () => {
+        if (city) queryClient.setQueryData(['me'], await courierApi.setServiceArea(city));
         await queryClient.invalidateQueries({ queryKey: ['offers'] });
         navigation.goBack();
       })} />
     }>
       {action.error ? <Banner tone="danger" text={action.error} /> : null}
-      <ZonePicker value={zone} onChange={setZone} />
+      <CityPicker value={city} onChange={setCity} />
     </Screen>
   );
 }

@@ -149,7 +149,7 @@ async function readCourier(tx: Tx, courierId: string): Promise<CourierState | nu
   return { ...rest, affiliatedRestaurantIds: affiliations.map(item => item.restaurantId), activeDeliveryId: active?.id ?? null };
 }
 /** Why this courier may not take work of `mode` from this restaurant right now, or null. */
-function eligibilityError(courier: CourierState | null, mode: DeliveryMode, restaurant: { id: string; city: string; serviceZone: string | null }): ApiError | null {
+function eligibilityError(courier: CourierState | null, mode: DeliveryMode, restaurant: { id: string; city: string }): ApiError | null {
   if (!courier) return new ApiError(404, 'COURIER_NOT_FOUND', 'Курьер не найден');
   if (courier.approvalStatus === 'SUSPENDED') return new ApiError(403, 'COURIER_SUSPENDED', 'Аккаунт курьера заблокирован');
   if (!courier.onboardingCompletedAt) return new ApiError(409, 'ONBOARDING_INCOMPLETE', 'Курьер не завершил регистрацию');
@@ -159,19 +159,19 @@ function eligibilityError(courier: CourierState | null, mode: DeliveryMode, rest
   } else {
     if (courier.approvalStatus !== 'APPROVED') return new ApiError(403, 'NOT_APPROVED', 'Курьер не допущен к свободным доставкам UzBite');
     if (courier.workMode !== 'FREELANCE') return new ApiError(409, 'WRONG_WORK_MODE', 'Курьер работает не в режиме «Свободные доставки»');
-    if (courier.city !== restaurant.city || (restaurant.serviceZone && courier.serviceZone !== restaurant.serviceZone)) return new ApiError(409, 'OUT_OF_AREA', 'Заказ находится вне рабочей зоны курьера');
+    if (!courier.city || courier.city !== restaurant.city) return new ApiError(409, 'OUT_OF_AREA', 'Заказ находится в другом городе');
   }
   if (!courier.isAvailable) return new ApiError(409, 'COURIER_UNAVAILABLE', 'Курьер сейчас недоступен');
   if (courier.activeDeliveryId) return new ApiError(409, 'COURIER_BUSY', 'У курьера уже есть активная доставка');
   return null;
 }
-/** Free couriers matched by configured city/zone (never GPS) who have not already handled this search. */
-async function freeCandidates(tx: Tx, restaurant: { city: string; serviceZone: string | null }, deliveryId: string, among?: string[]) {
+/** Free couriers matched by their chosen city (never GPS) who have not already handled this search. */
+async function freeCandidates(tx: Tx, restaurant: { city: string }, deliveryId: string, among?: string[]) {
   const rows = await tx.courierProfile.findMany({
     where: {
       ...(among ? { userId: { in: among } } : {}),
       approvalStatus: 'APPROVED', workMode: 'FREELANCE', isAvailable: true, onboardingCompletedAt: { not: null },
-      city: restaurant.city, ...(restaurant.serviceZone ? { serviceZone: restaurant.serviceZone } : {}),
+      city: restaurant.city,
       deliveries: { none: { status: { in: ACTIVE_DELIVERY } } },
       // A courier who already dropped this delivery is not offered it again.
       offers: { none: { deliveryId, OR: [{ status: 'PENDING' }, { status: 'ACCEPTED', releasedAt: { not: null } }] } },
@@ -368,12 +368,12 @@ export async function startFreeSearch(restaurantId: string, orderId: string, inp
   });
 }
 
-/** A free courier who becomes available (or changes zone) during open searches receives their offers too. */
+/** A free courier who becomes available (or changes city) during open searches receives their offers too. */
 export async function matchCourierToOpenSearches(courierId: string) {
   const courier = await db.courierProfile.findUnique({ where: { userId: courierId } });
-  if (!courier || courier.workMode !== 'FREELANCE' || !courier.isAvailable || courier.approvalStatus !== 'APPROVED' || !courier.onboardingCompletedAt) return 0;
+  if (!courier?.city || courier.workMode !== 'FREELANCE' || !courier.isAvailable || courier.approvalStatus !== 'APPROVED' || !courier.onboardingCompletedAt) return 0;
   const searches = await db.delivery.findMany({
-    where: { status: 'SEARCHING', searchExpiresAt: { gt: new Date() }, restaurant: { city: courier.city, OR: [{ serviceZone: null }, { serviceZone: courier.serviceZone }] } },
+    where: { status: 'SEARCHING', searchExpiresAt: { gt: new Date() }, restaurant: { city: courier.city } },
     select: { id: true, orderId: true }, orderBy: { searchStartedAt: 'asc' }, take: 20,
   });
   if (!searches.length) return 0;
@@ -382,7 +382,7 @@ export async function matchCourierToOpenSearches(courierId: string) {
     const state = await readCourier(tx, courierId);
     let created = 0;
     for (const search of searches) {
-      const delivery = await tx.delivery.findUniqueOrThrow({ where: { id: search.id }, include: { restaurant: { select: { id: true, city: true, serviceZone: true } }, order: { select: { restaurantName: true } }, offers: { where: { courierId }, select: { createdAt: true, status: true, releasedAt: true } } } });
+      const delivery = await tx.delivery.findUniqueOrThrow({ where: { id: search.id }, include: { restaurant: { select: { id: true, city: true } }, order: { select: { restaurantName: true } }, offers: { where: { courierId }, select: { createdAt: true, status: true, releasedAt: true } } } });
       const at = new Date();
       if (delivery.status !== 'SEARCHING' || !delivery.searchExpiresAt || delivery.searchExpiresAt <= at) continue;
       // One offer per courier per search; a courier who dropped this delivery is not offered it again.
@@ -423,7 +423,7 @@ export async function acceptOffer(courierId: string, offerId: string) {
     await lockRows(tx, { orders: [target.delivery.orderId, ...pending.map(item => item.delivery.orderId)], deliveries: [target.deliveryId, ...pending.map(item => item.deliveryId)], couriers: [courierId] });
     await pendingOffersUnchanged(tx, courierId, pending);
     const offer = await tx.deliveryOffer.findUniqueOrThrow({ where: { id: offerId } });
-    const delivery = await tx.delivery.findUniqueOrThrow({ where: { id: offer.deliveryId }, include: { order: true, restaurant: { select: { id: true, city: true, serviceZone: true } } } });
+    const delivery = await tx.delivery.findUniqueOrThrow({ where: { id: offer.deliveryId }, include: { order: true, restaurant: { select: { id: true, city: true } } } });
     if (offer.status === 'ACCEPTED' && !offer.releasedAt && delivery.courierId === courierId) return courierDelivery(tx, delivery.id, courierId);
     if (offer.status === 'TAKEN' || (delivery.courierId && delivery.courierId !== courierId)) throw closedOfferError('TAKEN');
     if (offer.status !== 'PENDING') throw closedOfferError(offer.status);
@@ -786,14 +786,14 @@ export async function advanceReward(restaurantId: string, deliveryId: string, to
 // ---------------------------------------------------------------------------------------------
 
 /** Why the courier cannot go online in the current mode, or null. The mode itself is only a preference. */
-function readinessError(courier: Pick<CourierState, 'approvalStatus' | 'onboardingCompletedAt' | 'workMode' | 'serviceZone' | 'affiliatedRestaurantIds'>): ApiError | null {
+function readinessError(courier: Pick<CourierState, 'approvalStatus' | 'onboardingCompletedAt' | 'workMode' | 'city' | 'affiliatedRestaurantIds'>): ApiError | null {
   if (courier.approvalStatus === 'SUSPENDED') return new ApiError(403, 'COURIER_SUSPENDED', 'Аккаунт курьера заблокирован');
   if (!courier.onboardingCompletedAt) return new ApiError(409, 'ONBOARDING_INCOMPLETE', 'Сначала завершите регистрацию');
   if (!courier.workMode) return new ApiError(409, 'WORK_MODE_REQUIRED', 'Выберите режим работы');
   const permissions = courierPermissions(courier, courier.affiliatedRestaurantIds.length);
   if (courier.workMode === 'RESTAURANT') return permissions.restaurantMode ? null : new ApiError(403, 'MODE_NOT_ALLOWED', 'Режим «Свой ресторан» доступен после привязки к ресторану по коду приглашения');
   if (!permissions.freelanceMode) return new ApiError(403, 'MODE_NOT_ALLOWED', 'Свободные доставки доступны после допуска UzBite');
-  return courier.serviceZone ? null : new ApiError(409, 'SERVICE_AREA_REQUIRED', 'Укажите город и район работы');
+  return courier.city ? null : new ApiError(409, 'SERVICE_AREA_REQUIRED', 'Выберите город работы');
 }
 
 type Withdrawal = { reason: string; where?: Prisma.DeliveryOfferWhereInput };
@@ -849,12 +849,12 @@ export async function setCourierWorkMode(courierId: string, mode: CourierWorkMod
   return profile;
 }
 
-/** Free-search offers from the old area are withdrawn; open searches in the new area are offered. */
-export async function setCourierServiceArea(courierId: string, city: string, zone: string) {
+/** Free-search offers from the old city are withdrawn; open searches in the new city are offered. */
+export async function setCourierServiceArea(courierId: string, city: string) {
   const current = await db.courierProfile.findUnique({ where: { userId: courierId } });
   assert(current, 404, 'NOT_FOUND', 'Профиль курьера не найден');
-  if (current.city === city && current.serviceZone === zone) return current;
-  const profile = await changeCourierState(courierId, asCourier(courierId), { reason: 'SERVICE_AREA_CHANGED', where: { mode: 'UZBITE_COURIER' } }, (tx, out) => updateCourierProfile(tx, out, courierId, { city, serviceZone: zone }));
+  if (current.city === city) return current;
+  const profile = await changeCourierState(courierId, asCourier(courierId), { reason: 'SERVICE_AREA_CHANGED', where: { mode: 'UZBITE_COURIER' } }, (tx, out) => updateCourierProfile(tx, out, courierId, { city }));
   await matchCourierToOpenSearches(courierId).catch(() => 0);
   return profile;
 }

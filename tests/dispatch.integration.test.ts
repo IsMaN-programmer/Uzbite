@@ -10,13 +10,12 @@ import * as dispatch from '../apps/backend/src/services/dispatch.js';
 import { ApiError } from '../apps/backend/src/utils/errors.js';
 
 // Service-level dispatch tests on the real PostgreSQL database. Test rows are removed afterwards;
-// the demo catalog is only read (the restaurant zone is restored).
+// the demo catalog is only read.
 type Json = Record<string, unknown>;
 const suffix = randomUUID().replaceAll('-', '').slice(0, 10);
 const RESTAURANT = 'rest-osh', OTHER_RESTAURANT = 'rest-basilico';
 const userIds: string[] = [];
 let staff: dispatch.DispatchActor, otherStaff: dispatch.DispatchActor;
-let originalZone: string | null = null;
 
 async function rejectsWith(promise: Promise<unknown>, code: string) {
   await assert.rejects(promise, (error: unknown) => {
@@ -36,7 +35,7 @@ async function makeStaff(restaurantId: string, label: string): Promise<dispatch.
   await db.restaurantStaff.create({ data: { userId: id, restaurantId } });
   return { id, role: 'RESTAURANT' };
 }
-async function makeCourier(label: string, profile: Partial<Pick<CourierProfile, 'approvalStatus' | 'workMode' | 'isAvailable' | 'serviceZone' | 'onboardingCompletedAt'>> = {}) {
+async function makeCourier(label: string, profile: Partial<Pick<CourierProfile, 'approvalStatus' | 'workMode' | 'isAvailable' | 'city' | 'onboardingCompletedAt'>> = {}) {
   const id = await makeUser('COURIER', label);
   await db.courierProfile.create({ data: { userId: id, firstName: label, lastName: 'Test', onboardingStep: 5, onboardingCompletedAt: new Date(), city: 'tashkent', ...profile } });
   return id;
@@ -66,7 +65,6 @@ const wrongCode = (code: string) => String((Number(code) + 1) % 10_000).padStart
 const eventTypes = async (deliveryId: string) => (await db.deliveryEvent.findMany({ where: { deliveryId }, orderBy: { createdAt: 'asc' } })).map(event => event.type);
 
 before(async () => {
-  originalZone = (await db.restaurant.findUniqueOrThrow({ where: { id: RESTAURANT } })).serviceZone;
   staff = await makeStaff(RESTAURANT, 'staff');
   otherStaff = await makeStaff(OTHER_RESTAURANT, 'otherstaff');
 });
@@ -79,7 +77,6 @@ after(async () => {
     await db.payment.deleteMany({ where: { orderId: { in: orderIds } } });
     await db.order.deleteMany({ where: { id: { in: orderIds } } });
     await db.user.deleteMany({ where: { id: { in: userIds } } });
-    await db.restaurant.update({ where: { id: RESTAURANT }, data: { serviceZone: originalZone } });
   } finally { await db.$disconnect(); }
 });
 
@@ -150,12 +147,12 @@ test('Own courier: personal offer, accept, ready, pickup, start, cash, code, del
   assert.equal((await db.notification.count({ where: { userId: otherStaff.id!, metadata: { path: ['orderId'], equals: orderId } } })), 0, 'Another restaurant is never notified');
 });
 
-test('Free search: zone matching, late availability and atomic acceptance by exactly one courier', async () => {
-  await db.restaurant.update({ where: { id: RESTAURANT }, data: { serviceZone: 'mirabad' } });
-  const free = { approvalStatus: 'APPROVED' as const, workMode: 'FREELANCE' as const, isAvailable: true, serviceZone: 'mirabad' };
+test('Free search: city matching, late availability and atomic acceptance by exactly one courier', async () => {
+  assert.equal((await db.restaurant.findUniqueOrThrow({ where: { id: RESTAURANT } })).city, 'tashkent');
+  const free = { approvalStatus: 'APPROVED' as const, workMode: 'FREELANCE' as const, isAvailable: true, city: 'tashkent' };
   const first = await makeCourier('free_a', free), second = await makeCourier('free_b', free);
   const late = await makeCourier('free_late', { ...free, isAvailable: false });
-  const elsewhere = await makeCourier('free_far', { ...free, serviceZone: 'chilanzar' });
+  const elsewhere = await makeCourier('free_far', { ...free, city: 'samarkand' });
   const unapproved = await makeCourier('free_pending', { ...free, approvalStatus: 'PENDING' });
   const freelancers = [first, second, late, elsewhere, unapproved];
   try {
@@ -190,7 +187,6 @@ test('Free search: zone matching, late availability and atomic acceptance by exa
     await rejectsWith(dispatch.acceptOffer(loser, (await offerFor(loser, deliveryId)).id), 'OFFER_TAKEN');
   } finally {
     for (const courierId of freelancers) await dispatch.setCourierAvailability(courierId, false);
-    await db.restaurant.update({ where: { id: RESTAURANT }, data: { serviceZone: originalZone } });
   }
 });
 
@@ -214,7 +210,7 @@ test('Deadlines use server time: expired personal offers and searches return to 
   assert.equal((await deliveryOf(orderId)).status, 'NOT_REQUESTED');
   assert.ok(await db.notification.count({ where: { userId: staff.id!, metadata: { path: ['event'], equals: 'OFFER_EXPIRED' } } }));
 
-  const free = await makeCourier('exp_free', { approvalStatus: 'APPROVED', workMode: 'FREELANCE', isAvailable: true, serviceZone: 'yunusabad' });
+  const free = await makeCourier('exp_free', { approvalStatus: 'APPROVED', workMode: 'FREELANCE', isAvailable: true });
   try {
     await dispatch.startFreeSearch(RESTAURANT, orderId, { reward: 20000 }, staff);
     const freeOffer = await offerFor(free, deliveryId);

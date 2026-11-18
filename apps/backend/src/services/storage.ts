@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
+import { mkdir, rm, rmdir, writeFile } from 'node:fs/promises';
+import { dirname, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import type { UploadPurpose } from '@prisma/client';
+import type { Upload, UploadPurpose } from '@prisma/client';
 import { env, storageReady, receiptStorageReady } from '../config/env.js';
 import { db } from '../config/database.js';
 import { assert } from '../utils/errors.js';
@@ -37,4 +40,55 @@ export async function signedReceipt(userId: string, id: string) {
   assert(upload, 404, 'NOT_FOUND', 'Файл не найден');
   assert(receiptStorageReady, 503, 'STORAGE_NOT_CONFIGURED', 'Облачное хранилище пока не настроено');
   return getSignedUrl(s3, new GetObjectCommand({ Bucket: env.S3_PRIVATE_BUCKET!, Key: upload.key, ResponseCacheControl: 'private, no-store' }), { expiresIn: 60 });
+}
+
+/**
+ * Private identity files (courier face photos). Stored in the private S3 bucket when it is
+ * configured. Development without a bucket keeps them on this computer in the ignored
+ * `.local/private-uploads` folder (key prefix `local:`); production never falls back to disk.
+ */
+const LOCAL_PREFIX = 'local:';
+const localRoot = fileURLToPath(new URL('../../../../.local/private-uploads/', import.meta.url));
+export const privateStorageReady = () => receiptStorageReady || env.NODE_ENV !== 'production';
+function localPath(key: string) {
+  const path = resolve(localRoot, key.slice(LOCAL_PREFIX.length));
+  assert(path.startsWith(resolve(localRoot) + sep), 500, 'STORAGE_PATH', 'Недопустимый путь файла');
+  return path;
+}
+/** Where a private file lives, for the developer admission CLI. */
+export function privateFileLocation(upload: Pick<Upload, 'key'>) {
+  return upload.key.startsWith(LOCAL_PREFIX) ? localPath(upload.key) : `s3://${env.S3_PRIVATE_BUCKET}/${upload.key}`;
+}
+export async function storePrivateImage(userId: string, purpose: 'COURIER_FACE', file: Express.Multer.File | undefined) {
+  assert(privateStorageReady(), 503, 'STORAGE_NOT_CONFIGURED', 'Облачное хранилище пока не настроено');
+  assert(file, 400, 'FILE_REQUIRED', 'Выберите файл');
+  assert(file.size <= 8 * 1024 * 1024, 400, 'FILE_TOO_LARGE', 'Файл слишком большой');
+  const image = detectImage(file.buffer);
+  assert(image, 400, 'FILE_TYPE', 'Разрешены только настоящие изображения JPEG, PNG и WebP');
+  const objectKey = `courier-faces/${userId}/${randomUUID()}.${image.extension}`;
+  let key: string;
+  if (receiptStorageReady) {
+    key = objectKey;
+    await s3.send(new PutObjectCommand({ Bucket: env.S3_PRIVATE_BUCKET!, Key: key, Body: file.buffer, ContentType: image.mimeType, ContentLength: file.size, CacheControl: 'private, no-store', ServerSideEncryption: 'AES256' }));
+  } else {
+    key = `${LOCAL_PREFIX}${objectKey}`;
+    const path = localPath(key);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, file.buffer, { mode: 0o600 });
+  }
+  try {
+    return await db.upload.create({ data: { userId, purpose, key, mimeType: image.mimeType, size: file.size } });
+  } catch (error) {
+    await deletePrivateObject({ key });
+    throw error;
+  }
+}
+/** Removes the stored object only; the caller deletes the Upload row. Failures are not fatal. */
+export async function deletePrivateObject(upload: Pick<Upload, 'key'>) {
+  if (upload.key.startsWith(LOCAL_PREFIX)) {
+    const path = localPath(upload.key);
+    await rm(path, { force: true }).catch(() => {});
+    await rmdir(dirname(path)).catch(() => { /* Not empty: other files of this courier remain. */ });
+  }
+  else await s3.send(new DeleteObjectCommand({ Bucket: env.S3_PRIVATE_BUCKET!, Key: upload.key })).catch(() => {});
 }

@@ -35,6 +35,8 @@ const paths = {
   wallet: 'M3 7h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM3 7l12-4 2 4M16 13.5h2',
   key: 'M15 7a4 4 0 1 1-3.5 6L4 20.5V17h3v-3h3l1.5-1.5A4 4 0 0 1 15 7m1.5 0h.01',
   alert: 'M12 3 2 20h20zM12 9v5m0 3h.01',
+  camera: 'M3 8h4l2-3h6l2 3h4v12H3zM15.5 13.5a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0',
+  image: 'M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6M15.5 9.5h.01',
 } as const;
 export type IconName = keyof typeof paths | 'help';
 /** Icons are decorative (buttons carry the label). The web build has no such native props. */

@@ -42,6 +42,8 @@ enum MediaType {
 enum UploadPurpose {
   AVATAR
   RECEIPT
+  /// Courier selfie for UzBite admission. Private, never served to restaurants or customers.
+  COURIER_FACE
 }
 
 /// Platform admission. Own-restaurant work is vouched for by an active affiliation;
@@ -415,8 +417,9 @@ model Upload {
   size      Int
   purpose   UploadPurpose
   createdAt DateTime      @default(now())
-  user      User          @relation(fields: [userId], references: [id], onDelete: Restrict)
-  payment   Payment?
+  user        User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  payment     Payment?
+  courierFace CourierProfile? @relation("CourierFacePhoto")
 
   @@index([userId, purpose])
 }
@@ -456,8 +459,13 @@ model CourierProfile {
   isTestAccount         Boolean                        @default(false)
   workMode              CourierWorkMode?
   isAvailable           Boolean                        @default(false)
-  city                  String                         @default("tashkent")
-  serviceZone           String?
+  /// City for free deliveries (matched by city, never by GPS); null until the courier chooses one.
+  city                  String?
+  /// Identity for UzBite admission: passport series (2 Latin letters) and number (7 digits).
+  passportSeries        String?
+  passportNumber        String?
+  facePhotoId           String?                        @unique
+  facePhoto             Upload?                        @relation("CourierFacePhoto", fields: [facePhotoId], references: [id], onDelete: SetNull)
   onboardingStep        Int                            @default(1)
   onboardingCompletedAt DateTime?
   createdAt             DateTime                       @default(now())
@@ -469,6 +477,7 @@ model CourierProfile {
   deliveries            Delivery[]
   issues                DeliveryIssue[]
 
+  @@unique([passportSeries, passportNumber])
   @@index([workMode, isAvailable, approvalStatus, city])
 }
 

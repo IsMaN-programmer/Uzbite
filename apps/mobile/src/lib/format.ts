@@ -1,4 +1,4 @@
-import { SERVICE_ZONES, type Language } from '@uzbite/shared';
+import { SERVICE_CITIES, SERVICE_ZONES, type Language } from '@uzbite/shared';
 
 const currency: Record<Language, string> = { ru: 'сум', uz: 'so‘m', en: 'UZS' };
 /** 125000 → "125 000 сум"; no Intl dependency so it formats the same on every engine. */
@@ -21,4 +21,12 @@ export function zoneName(code: string | null | undefined, language: Language) {
   if (!code) return '';
   return SERVICE_ZONES.find(zone => zone.code === code)?.name[language] ?? code;
 }
+export function cityName(code: string | null | undefined, language: Language) {
+  if (!code) return '';
+  return SERVICE_CITIES.find(city => city.code === code)?.name[language] ?? code;
+}
+/** Passport series: Cyrillic look-alikes become Latin (А→A, В→B…), anything but letters is dropped. */
+const LOOKALIKES: Record<string, string> = { А: 'A', В: 'B', С: 'C', Е: 'E', Н: 'H', К: 'K', М: 'M', О: 'O', Р: 'P', Т: 'T', Х: 'X', У: 'Y' };
+export const passportSeriesInput = (value: string) => value.toUpperCase().replace(/[А-ЯЁ]/g, letter => LOOKALIKES[letter] ?? '').replace(/[^A-Z]/g, '').slice(0, 2);
+export const passportNumberInput = (value: string) => value.replace(/\D/g, '').slice(0, 7);
 export const initials = (first: string, last: string) => `${first.trim()[0] ?? ''}${last.trim()[0] ?? ''}`.toUpperCase() || 'U';

@@ -81,3 +81,11 @@ export async function call<T>(method: 'get' | 'post' | 'patch', url: string, bod
   const response = await api.request<Envelope<T>>({ method, url, data: body, params });
   return response.data;
 }
+/**
+ * Multipart upload. React Native's networking adds the boundary itself; in a browser axios drops
+ * the explicit type so the browser sets it. Photos can be slow on mobile data, hence the timeout.
+ */
+export async function upload<T>(url: string, form: FormData) {
+  const response = await api.post<Envelope<T>>(url, form, { headers: { 'Content-Type': 'multipart/form-data' }, transformRequest: data => data as FormData, timeout: 60000 });
+  return response.data;
+}

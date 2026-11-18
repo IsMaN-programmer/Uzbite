@@ -70,19 +70,18 @@ export function LoginScreen() {
   );
 }
 
-type RegisterForm = { firstName: string; lastName: string; email: string; phone: string; password: string; passwordConfirmation: string };
+/** Only phone, email and password: name, passport and face photo are asked in onboarding step 1. */
+type RegisterForm = { phone: string; email: string; password: string; passwordConfirmation: string };
 export function RegisterScreen() {
   const navigation = useNavigation<Nav>();
   const { t, errorText } = usePrefs();
   const session = useSession();
-  const [form, setForm] = useState<RegisterForm>({ firstName: '', lastName: '', email: '', phone: '+998 ', password: '', passwordConfirmation: '' });
+  const [form, setForm] = useState<RegisterForm>({ phone: '+998 ', email: '', password: '', passwordConfirmation: '' });
   const [errors, setErrors] = useState<Partial<Record<keyof RegisterForm, string>>>({});
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const set = (key: keyof RegisterForm) => (value: string) => setForm(previous => ({ ...previous, [key]: value }));
   const validate = () => {
     const next: Partial<Record<keyof RegisterForm, string>> = {};
-    if (!form.firstName.trim()) next.firstName = t('required');
-    if (!form.lastName.trim()) next.lastName = t('required');
     if (!emailPattern.test(form.email.trim())) next.email = t('emailInvalid');
     if (!validPhone(form.phone)) next.phone = t('phoneInvalid');
     if (form.password.length < 8) next.password = t('passwordShort');
@@ -93,7 +92,7 @@ export function RegisterScreen() {
   const submit = async () => {
     if (busy || !validate()) return;
     setBusy(true); setError('');
-    try { await session.register({ ...form, firstName: form.firstName.trim(), lastName: form.lastName.trim(), email: form.email.trim(), phone: form.phone.trim() }); }
+    try { await session.register({ ...form, email: form.email.trim(), phone: form.phone.trim() }); }
     catch (failure) {
       const fields = asAppError(failure).fields;
       if (fields) setErrors(Object.fromEntries(Object.keys(fields).map(key => [key, t('errVALIDATION')])));
@@ -104,10 +103,8 @@ export function RegisterScreen() {
     <Screen edges={['bottom']}>
       <LanguageSwitch />
       <AppText variant="title">{t('registerTitle')}</AppText>
-      <Field label={t('firstName')} value={form.firstName} onChangeText={set('firstName')} error={errors.firstName} autoComplete="given-name" maxLength={60} />
-      <Field label={t('lastName')} value={form.lastName} onChangeText={set('lastName')} error={errors.lastName} autoComplete="family-name" maxLength={60} />
-      <Field label={t('email')} value={form.email} onChangeText={set('email')} error={errors.email} autoCapitalize="none" keyboardType="email-address" autoComplete="email" />
       <Field label={t('phone')} value={form.phone} onChangeText={set('phone')} error={errors.phone} keyboardType="phone-pad" autoComplete="tel" />
+      <Field label={t('email')} value={form.email} onChangeText={set('email')} error={errors.email} autoCapitalize="none" keyboardType="email-address" autoComplete="email" />
       <Field label={t('password')} value={form.password} onChangeText={set('password')} error={errors.password} secureTextEntry autoComplete="new-password" maxLength={72} />
       <Field label={t('passwordConfirmation')} value={form.passwordConfirmation} onChangeText={set('passwordConfirmation')} error={errors.passwordConfirmation} secureTextEntry maxLength={72} />
       {error ? <Banner tone="danger" text={error} /> : null}

@@ -8,10 +8,13 @@ import { useSession } from '../session';
 import { useAccount } from '../hooks';
 import { Icon } from '../ui/Icon';
 import { AppText, Badge, Banner, Button, Field, Screen } from '../ui/kit';
-import { InvitationPanel, PermissionNotice, ZonePicker, useAction } from './shared';
-import { LanguageSwitch, validPhone } from './AuthScreens';
+import { CityPicker, FacePhotoField, InvitationPanel, PassportFields, PermissionNotice, useAction, validPassport } from './shared';
+import { LanguageSwitch } from './AuthScreens';
 
-/** Four steps, progress stored on the server: personal data → work mode → code or district → finish. */
+/**
+ * Four steps, progress stored on the server: name, passport and face photo → work mode →
+ * restaurant code or city → finish. Phone and email were given at registration.
+ */
 export function OnboardingScreen() {
   const { t, colors } = usePrefs();
   const session = useSession();
@@ -20,8 +23,11 @@ export function OnboardingScreen() {
   const profile = account.profile;
   const [step, setStep] = useState(Math.min(Math.max(profile.onboardingStep, 1), 4));
   const action = useAction();
-  const [first, setFirst] = useState(profile.firstName), [last, setLast] = useState(profile.lastName), [phone, setPhone] = useState(account.phone ?? '');
-  const [zone, setZone] = useState<string | null>(profile.serviceZone);
+  const { identity } = profile;
+  const [first, setFirst] = useState(profile.firstName), [last, setLast] = useState(profile.lastName);
+  const [series, setSeries] = useState(identity.passportSeries ?? ''), [number, setNumber] = useState(identity.passportNumber ?? '');
+  const [city, setCity] = useState<string | null>(profile.city);
+  const personalReady = Boolean(first.trim() && last.trim() && validPassport(series, number) && identity.facePhoto);
   const affiliations = useQuery({ queryKey: ['affiliations'], queryFn: courierApi.affiliations, enabled: step === 3 && profile.workMode === 'RESTAURANT' });
   const store = (next: CourierAccount) => queryClient.setQueryData(['me'], next);
   const go = (next: number) => action.run(async () => { store(await courierApi.onboarding({ step: next })); setStep(next); });
@@ -31,11 +37,14 @@ export function OnboardingScreen() {
     <Screen edges={['top', 'bottom']} footer={
       <View style={{ flexDirection: 'row', gap: 10 }}>
         {step > 1 ? <Button title={t('back')} variant="secondary" disabled={action.busy} onPress={() => void go(step - 1)} style={{ flex: 1 }} /> : null}
-        {step === 1 ? <Button title={t('next')} loading={action.busy} style={{ flex: 2 }} disabled={!first.trim() || !last.trim() || !validPhone(phone)}
-          onPress={() => void action.run(async () => { await courierApi.updateProfile({ firstName: first.trim(), lastName: last.trim(), phone: phone.trim() }); store(await courierApi.onboarding({ step: 2 })); setStep(2); })} /> : null}
+        {step === 1 ? <Button title={t('next')} loading={action.busy} style={{ flex: 2 }} disabled={!personalReady}
+          onPress={() => void action.run(async () => {
+            await courierApi.updateProfile({ firstName: first.trim(), lastName: last.trim(), ...(identity.locked ? {} : { passportSeries: series, passportNumber: number }) });
+            store(await courierApi.onboarding({ step: 2 })); setStep(2);
+          })} /> : null}
         {step === 3 ? <Button title={t('next')} loading={action.busy} style={{ flex: 2 }}
-          disabled={profile.workMode === 'RESTAURANT' ? account.activeAffiliations === 0 : !zone}
-          onPress={() => void action.run(async () => { if (profile.workMode === 'FREELANCE' && zone) await courierApi.setServiceArea('tashkent', zone); store(await courierApi.onboarding({ step: 4 })); setStep(4); })} /> : null}
+          disabled={profile.workMode === 'RESTAURANT' ? account.activeAffiliations === 0 : !city}
+          onPress={() => void action.run(async () => { if (profile.workMode === 'FREELANCE' && city && city !== profile.city) await courierApi.setServiceArea(city); store(await courierApi.onboarding({ step: 4 })); setStep(4); })} /> : null}
         {step === 4 ? <Button title={t('onbFinish')} loading={action.busy} style={{ flex: 2 }} onPress={() => void action.run(async () => store(await courierApi.onboarding({ complete: true })))} /> : null}
       </View>
     }>
@@ -49,9 +58,10 @@ export function OnboardingScreen() {
 
       {step === 1 ? <>
         <AppText muted>{t('onbPersonalText')}</AppText>
-        <Field label={t('firstName')} value={first} onChangeText={setFirst} maxLength={60} />
-        <Field label={t('lastName')} value={last} onChangeText={setLast} maxLength={60} />
-        <Field label={t('phone')} value={phone} onChangeText={setPhone} keyboardType="phone-pad" error={phone && !validPhone(phone) ? t('phoneInvalid') : undefined} />
+        <Field label={t('firstName')} value={first} onChangeText={setFirst} autoComplete="given-name" maxLength={60} />
+        <Field label={t('lastName')} value={last} onChangeText={setLast} autoComplete="family-name" maxLength={60} />
+        <PassportFields series={series} number={number} onSeries={setSeries} onNumber={setNumber} editable={!identity.locked} />
+        <FacePhotoField account={account} />
       </> : null}
 
       {step === 2 ? (['RESTAURANT', 'FREELANCE'] as CourierWorkMode[]).map(mode => {
@@ -76,7 +86,7 @@ export function OnboardingScreen() {
       </> : null}
       {step === 3 && profile.workMode === 'FREELANCE' ? <>
         <Badge tone={profile.approvalStatus === 'APPROVED' ? 'success' : 'warning'} text={t(`approval${profile.approvalStatus}`)} />
-        <ZonePicker value={zone} onChange={setZone} />
+        <CityPicker value={city} onChange={setCity} />
       </> : null}
 
       {step === 4 ? <>

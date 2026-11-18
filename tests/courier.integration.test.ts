@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { io, type Socket } from 'socket.io-client';
 import type { AuthTokens, CourierAccount, CourierDelivery, CourierEarnings, CourierHistoryItem, CourierOffer, DeliverySocketHint } from '@uzbite/shared';
 import { db } from '../apps/backend/src/config/database.js';
+import { deletePrivateObject } from '../apps/backend/src/services/storage.js';
 
 // REST tests of the courier and restaurant APIs against the running API and real PostgreSQL.
 // Staff accounts and courier admission go through the real developer CLIs. Test rows are removed.
@@ -68,15 +69,34 @@ async function makeStaff(slug: string, label: string) {
 }
 async function registerCourier(label: string, language: 'ru' | 'uz' | 'en' = 'ru') {
   const client = new AppClient();
-  const reply = await client.request<{ tokens: AuthTokens; account: CourierAccount }>('POST', '/courier/auth/register', { firstName: label, lastName: 'Test', email: emailOf(label), phone: '+998901112233', password, passwordConfirmation: password, language }, false);
+  const reply = await client.request<{ tokens: AuthTokens; account: CourierAccount }>('POST', '/courier/auth/register', { email: emailOf(label), phone: '+998901112233', password, passwordConfirmation: password, language }, false);
   assert.equal(reply.status, 201, JSON.stringify(reply.error));
   client.tokens = reply.data.tokens;
   return { client, id: reply.data.account.id };
 }
+/** Smallest valid JPEG header is enough: the server checks the real file signature. */
+const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0xff, 0xd9]);
+async function uploadFace(courier: AppClient, body: Buffer = JPEG, type = 'image/jpeg') {
+  const form = new FormData();
+  form.append('file', new Blob([new Uint8Array(body)], { type }), 'face.jpg');
+  const response = await fetch(`${base}/api/courier/identity/face-photo`, { method: 'POST', headers: { 'X-UzBite-Client': 'app', Authorization: `Bearer ${courier.tokens!.accessToken}` }, body: form });
+  const payload = await response.json() as { data: CourierAccount; error?: { code: string } };
+  return { status: response.status, data: payload.data, error: payload.error };
+}
+let passportCounter = 0;
+/** Unique 7-digit passport number per courier of this run (one account per passport). */
+const nextPassport = () => `${String(parseInt(suffix.slice(0, 6), 16) % 10_000).padStart(4, '0')}${String(passportCounter++).padStart(3, '0')}`;
+/** Onboarding step 1: name, passport and face photo. */
+async function identify(courier: AppClient) {
+  const personal = await courier.request<CourierAccount>('PATCH', '/courier/profile', { firstName: 'Courier', lastName: 'Test', passportSeries: 'aa', passportNumber: nextPassport() });
+  assert.equal(personal.status, 200, JSON.stringify(personal.error));
+  assert.equal((await uploadFace(courier)).status, 201);
+}
 async function onboard(courier: AppClient, mode: 'RESTAURANT' | 'FREELANCE') {
+  await identify(courier);
   assert.equal((await courier.request('PATCH', '/courier/onboarding', { step: 2 })).status, 200);
   assert.equal((await courier.request('PATCH', '/courier/work-mode', { mode })).status, 200);
-  if (mode === 'FREELANCE') assert.equal((await courier.request('PATCH', '/courier/service-area', { city: 'tashkent', zone: 'mirabad' })).status, 200);
+  if (mode === 'FREELANCE') assert.equal((await courier.request('PATCH', '/courier/service-area', { city: 'tashkent' })).status, 200);
   const done = await courier.request<CourierAccount>('PATCH', '/courier/onboarding', { complete: true });
   assert.equal(done.status, 200, JSON.stringify(done.error));
   assert.equal(done.data.profile.onboardingCompleted, true);
@@ -112,6 +132,9 @@ after(async () => {
     await db.delivery.deleteMany({ where: { orderId: { in: orderIds } } });
     await db.restaurantCourierAffiliation.deleteMany({ where: { courierId: { in: userIds } } });
     await db.courierInvitation.deleteMany({ where: { OR: [{ createdById: { in: userIds } }, { courierId: { in: userIds } }] } });
+    const faces = await db.upload.findMany({ where: { userId: { in: userIds }, purpose: 'COURIER_FACE' } });
+    await db.upload.deleteMany({ where: { id: { in: faces.map(face => face.id) } } });
+    await Promise.all(faces.map(face => deletePrivateObject(face)));
     await db.payment.deleteMany({ where: { orderId: { in: orderIds } } });
     await db.order.deleteMany({ where: { id: { in: orderIds } } });
     await db.user.deleteMany({ where: { id: { in: userIds } } });
@@ -120,7 +143,7 @@ after(async () => {
 
 test('Courier auth: registration without a role choice, login, refresh rotation, logout; other roles are kept out', async () => {
   const anonymous = new AppClient();
-  const input = { firstName: 'Aziz', lastName: 'Test', email: emailOf('auth'), phone: '+998901112233', password, passwordConfirmation: password, language: 'uz' };
+  const input = { email: emailOf('auth'), phone: '+998901112233', password, passwordConfirmation: password, language: 'uz' };
   assert.equal((await anonymous.request('POST', '/courier/auth/register', { ...input, role: 'RESTAURANT' }, false)).status, 400, 'A role cannot be supplied');
   assert.equal((await anonymous.request('POST', '/courier/auth/register', { ...input, passwordConfirmation: 'different' }, false)).status, 400);
   const created = await anonymous.request<{ tokens: AuthTokens; account: CourierAccount }>('POST', '/courier/auth/register', input, false);
@@ -154,6 +177,45 @@ test('Courier auth: registration without a role choice, login, refresh rotation,
   assert.equal((await courier.request('GET', '/orders')).status, 401, 'A courier token is not a customer session');
   assert.equal((await courier.request('GET', '/restaurant/orders')).status, 403);
   assert.equal((await osh.request('GET', '/courier/me')).status, 403);
+});
+
+test('Onboarding identity: name, passport and a private face photo are required; one account per passport; locked after admission', async () => {
+  const { client: courier, id } = await registerCourier('identity');
+  const fresh = (await courier.request<CourierAccount>('GET', '/courier/me')).data;
+  assert.equal(fresh.profile.firstName, '', 'Registration asks only for phone, email and password');
+  assert.equal(fresh.profile.city, null);
+  assert.deepEqual(fresh.profile.identity, { passportSeries: null, passportNumber: null, facePhoto: false, locked: false });
+  assert.equal((await courier.request('PATCH', '/courier/work-mode', { mode: 'FREELANCE' })).status, 200);
+  assert.equal((await courier.request('PATCH', '/courier/service-area', { city: 'tashkent', zone: 'mirabad' })).status, 400, 'Districts are no longer accepted');
+  assert.equal((await courier.request('PATCH', '/courier/service-area', { city: 'atlantis' })).status, 400);
+  assert.equal((await courier.request<CourierAccount>('PATCH', '/courier/service-area', { city: 'samarkand' })).data.profile.city, 'samarkand');
+  assert.equal((await courier.request('PATCH', '/courier/onboarding', { complete: true })).error?.code, 'PERSONAL_DATA_REQUIRED');
+
+  assert.equal((await courier.request('PATCH', '/courier/profile', { passportSeries: 'A1', passportNumber: '1234567' })).status, 400);
+  assert.equal((await courier.request('PATCH', '/courier/profile', { passportSeries: 'AB', passportNumber: '123456' })).status, 400);
+  assert.equal((await courier.request('PATCH', '/courier/profile', { passportSeries: 'AB' })).status, 400, 'Series and number come together');
+  const number = nextPassport();
+  const named = await courier.request<CourierAccount>('PATCH', '/courier/profile', { firstName: 'Aziz', lastName: 'Karimov', passportSeries: 'ab ', passportNumber: `${number.slice(0, 3)} ${number.slice(3)}` });
+  assert.equal(named.status, 200, JSON.stringify(named.error));
+  assert.deepEqual(named.data.profile.identity, { passportSeries: 'AB', passportNumber: number, facePhoto: false, locked: false });
+  assert.equal((await courier.request('PATCH', '/courier/onboarding', { complete: true })).error?.code, 'IDENTITY_REQUIRED');
+
+  assert.equal((await uploadFace(courier, Buffer.from('not an image'))).error?.code, 'FILE_TYPE');
+  const photo = await uploadFace(courier);
+  assert.equal(photo.status, 201, JSON.stringify(photo.error));
+  assert.equal(photo.data.profile.identity.facePhoto, true);
+  assert.equal((await uploadFace(courier)).status, 201, 'The photo can be retaken before admission');
+  assert.equal(await db.upload.count({ where: { userId: id, purpose: 'COURIER_FACE' } }), 1, 'The previous photo is removed');
+  const done = await courier.request<CourierAccount>('PATCH', '/courier/onboarding', { complete: true });
+  assert.equal(done.status, 200, JSON.stringify(done.error));
+
+  const { client: twin } = await registerCourier('identity_twin');
+  assert.equal((await twin.request('PATCH', '/courier/profile', { passportSeries: 'AB', passportNumber: number })).error?.code, 'PASSPORT_TAKEN');
+  await assert.rejects(cli('courier-approve.ts', emailOf('identity_twin')), /passport and a face photo/, 'Admission needs the identity');
+  assert.match(await cli('courier-approve.ts', emailOf('identity')), new RegExp(`Passport: AB ${number}[\\s\\S]*APPROVED`));
+  assert.equal((await courier.request<CourierAccount>('GET', '/courier/me')).data.profile.identity.locked, true);
+  assert.equal((await courier.request('PATCH', '/courier/profile', { passportSeries: 'AC', passportNumber: number })).error?.code, 'IDENTITY_LOCKED');
+  assert.equal((await uploadFace(courier)).error?.code, 'IDENTITY_LOCKED');
 });
 
 test('Invitations: code → claim → accept → affiliation in PostgreSQL; expired, revoked and reused codes are rejected', async () => {
@@ -260,7 +322,7 @@ test('Own courier end to end over REST: customer order → restaurant → courie
   assert.equal((await courier.request<CourierAccount>('GET', '/courier/me')).data.profile.availability, 'AVAILABLE');
 });
 
-test('Free search over REST: admission by CLI, zone setup, two couriers race and exactly one wins', async () => {
+test('Free search over REST: admission by CLI, city setup, two couriers race and exactly one wins', async () => {
   const first = await registerCourier('free_one'), second = await registerCourier('free_two');
   for (const courier of [first, second]) {
     await onboard(courier.client, 'FREELANCE');

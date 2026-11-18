@@ -1,9 +1,10 @@
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import type { CourierAccount, CourierEarnings, CourierHistoryItem, CourierHistoryOutcome, Language, Theme } from '@uzbite/shared';
 import { db } from '../config/database.js';
-import { assert } from '../utils/errors.js';
+import { ApiError, assert } from '../utils/errors.js';
 import { ACTIVE_DELIVERY, orderNumber } from './dispatch-dto.js';
 import { courierAvailability, courierPermissions } from './dispatch.js';
+import { deletePrivateObject, storePrivateImage } from './storage.js';
 
 const language = (value: string | undefined): Language => value === 'uz' || value === 'en' ? value : 'ru';
 const theme = (value: string | undefined): Theme => value === 'dark' ? 'dark' : 'light';
@@ -21,25 +22,63 @@ export async function courierAccount(userId: string): Promise<CourierAccount> {
     profile: {
       firstName: profile.firstName, lastName: profile.lastName, approvalStatus: profile.approvalStatus, isTestAccount: profile.isTestAccount,
       workMode: profile.workMode, isAvailable: profile.isAvailable, availability: courierAvailability(profile, active?.id ?? null),
-      city: profile.city, serviceZone: profile.serviceZone, onboardingStep: profile.onboardingStep, onboardingCompleted: Boolean(profile.onboardingCompletedAt),
+      city: profile.city, onboardingStep: profile.onboardingStep, onboardingCompleted: Boolean(profile.onboardingCompletedAt),
       permissions: courierPermissions(profile, affiliations),
+      identity: { passportSeries: profile.passportSeries, passportNumber: profile.passportNumber, facePhoto: Boolean(profile.facePhotoId), locked: identityLocked(profile) },
     },
     activeDeliveryId: active?.id ?? null, activeAffiliations: affiliations, createdAt: user.createdAt.toISOString(),
   };
 }
 
+/** Identity is checked by UzBite at admission; after that (or when blocked) it cannot be changed. */
+export const identityLocked = (profile: { approvalStatus: string }) => profile.approvalStatus !== 'PENDING';
+const identityLockedError = () => new ApiError(409, 'IDENTITY_LOCKED', 'Паспортные данные и фото уже проверены. Для изменения обратитесь в поддержку');
+
+/** Passport series and number together. One courier account per passport (unique index). */
+export async function setCourierPassport(courierId: string, passportSeries: string, passportNumber: string, tx: Prisma.TransactionClient = db) {
+  const profile = await tx.courierProfile.findUniqueOrThrow({ where: { userId: courierId } });
+  if (profile.passportSeries === passportSeries && profile.passportNumber === passportNumber) return;
+  if (identityLocked(profile)) throw identityLockedError();
+  try { await tx.courierProfile.update({ where: { userId: courierId }, data: { passportSeries, passportNumber } }); }
+  catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw new ApiError(409, 'PASSPORT_TAKEN', 'Этот паспорт уже указан в другом аккаунте курьера');
+    throw error;
+  }
+}
+
+/** Stores a new private face photo and removes the previous one. */
+export async function setCourierFacePhoto(courierId: string, file: Express.Multer.File | undefined) {
+  const profile = await db.courierProfile.findUnique({ where: { userId: courierId }, include: { facePhoto: true } });
+  assert(profile, 404, 'NOT_FOUND', 'Профиль курьера не найден');
+  if (identityLocked(profile)) throw identityLockedError();
+  const upload = await storePrivateImage(courierId, 'COURIER_FACE', file);
+  try {
+    await db.courierProfile.update({ where: { userId: courierId }, data: { facePhotoId: upload.id } });
+  } catch (error) {
+    await db.upload.delete({ where: { id: upload.id } }).catch(() => {});
+    await deletePrivateObject(upload);
+    throw error;
+  }
+  if (profile.facePhoto) {
+    await db.upload.delete({ where: { id: profile.facePhoto.id } }).catch(() => {});
+    await deletePrivateObject(profile.facePhoto);
+  }
+  return courierAccount(courierId);
+}
+
 /**
- * Onboarding progress is stored on the server: 1 personal data → 2 work mode → 3 restaurant code or
- * city/district → 4 finish. Finishing re-checks the data each mode needs.
+ * Onboarding progress is stored on the server: 1 name, passport and face photo → 2 work mode →
+ * 3 restaurant code or city → 4 finish. Finishing re-checks the data each mode needs.
  */
 export async function updateOnboarding(courierId: string, input: { step?: number; complete?: boolean }) {
   const profile = await db.courierProfile.findUnique({ where: { userId: courierId }, include: { user: { select: { phone: true } }, _count: { select: { affiliations: { where: { status: 'ACTIVE' } } } } } });
   assert(profile, 404, 'NOT_FOUND', 'Профиль курьера не найден');
   if (input.complete) {
-    assert(profile.firstName.trim() && profile.user.phone, 409, 'PERSONAL_DATA_REQUIRED', 'Заполните имя и телефон');
+    assert(profile.firstName.trim() && profile.lastName.trim() && profile.user.phone, 409, 'PERSONAL_DATA_REQUIRED', 'Заполните имя и фамилию');
+    assert(profile.passportSeries && profile.passportNumber && profile.facePhotoId, 409, 'IDENTITY_REQUIRED', 'Укажите серию и номер паспорта и сделайте фото лица');
     assert(profile.workMode, 409, 'WORK_MODE_REQUIRED', 'Выберите режим работы');
     if (profile.workMode === 'RESTAURANT') assert(profile._count.affiliations > 0, 409, 'AFFILIATION_REQUIRED', 'Введите код приглашения ресторана и подтвердите привязку');
-    else assert(profile.serviceZone, 409, 'SERVICE_AREA_REQUIRED', 'Укажите город и район работы');
+    else assert(profile.city, 409, 'SERVICE_AREA_REQUIRED', 'Выберите город работы');
     await db.courierProfile.update({ where: { userId: courierId }, data: { onboardingStep: 4, onboardingCompletedAt: profile.onboardingCompletedAt ?? new Date() } });
   } else if (input.step !== undefined) {
     await db.courierProfile.update({ where: { userId: courierId }, data: { onboardingStep: input.step } });

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Router, type RequestHandler } from 'express';
 import bcrypt from 'bcryptjs';
+import multer from 'multer';
 import { z } from 'zod';
 import { db } from '../config/database.js';
 import { env } from '../config/env.js';
@@ -8,7 +9,7 @@ import { requireCourier } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/security.js';
 import { createAppSession, refreshAppSession, revokeAppSession } from '../services/auth.js';
 import { disconnectSession } from '../services/realtime.js';
-import { courierAccount, courierEarnings, courierHistory, updateOnboarding } from '../services/courier-account.js';
+import { courierAccount, courierEarnings, courierHistory, setCourierFacePhoto, setCourierPassport, updateOnboarding } from '../services/courier-account.js';
 import { acceptInvitation, claimInvitation, courierAffiliation, listCourierAffiliations, listCourierInvitations, rejectInvitation } from '../services/affiliations.js';
 import {
   acceptOffer, completeDelivery, confirmCashCollected, confirmPickup, endAffiliation, getActiveCourierDelivery, getCourierDelivery, getCourierOffer,
@@ -26,8 +27,9 @@ import { actorOf, appLoginSchema, emailTaken, emailTakenError, logoutSchema, mou
  */
 export const courierRouter = Router();
 const nameSchema = z.string().trim().min(1).max(60);
+/** Name, passport and face photo are collected in onboarding step 1, not at registration. */
 const registerSchema = z.object({
-  firstName: nameSchema, lastName: nameSchema, email: emailSchema, phone: phoneSchema,
+  email: emailSchema, phone: phoneSchema,
   password: newPasswordSchema, passwordConfirmation: z.string().max(72),
   language: z.enum(['ru', 'uz', 'en']).default('ru'), theme: z.enum(['light', 'dark']).default('light'),
 }).strict().refine(input => input.password === input.passwordConfirmation, { path: ['passwordConfirmation'], message: 'Пароли не совпадают' });
@@ -40,9 +42,9 @@ courierRouter.post('/auth/register', rateLimit('courier-register', env.NODE_ENV 
   try {
     session = await db.$transaction(async tx => {
       const user = await tx.user.create({ data: {
-        email: input.email, phone: input.phone, name: `${input.firstName} ${input.lastName}`, username: handle, passwordHash, role: 'COURIER',
+        email: input.email, phone: input.phone, name: '', username: handle, passwordHash, role: 'COURIER',
         settings: { create: { language: input.language, theme: input.theme } },
-        courierProfile: { create: { firstName: input.firstName, lastName: input.lastName } },
+        courierProfile: { create: { firstName: '' } },
       } });
       return { userId: user.id, tokens: await createAppSession(user, tx) };
     });
@@ -71,10 +73,14 @@ const me = (req: { user?: { id: string } }) => req.user!.id;
 courierRouter.get('/me', async (req, res) => { res.json({ data: await courierAccount(me(req)) }); });
 courierRouter.get('/profile', async (req, res) => { res.json({ data: await courierAccount(me(req)) }); });
 
+/** Uzbek passport / ID card: 2 Latin letters and 7 digits. Spaces are ignored, letters upper-cased. */
+const passportSeriesSchema = z.string().transform(value => value.replace(/\s/g, '').toUpperCase()).pipe(z.string().regex(/^[A-Z]{2}$/, 'Серия — две латинские буквы'));
+const passportNumberSchema = z.string().transform(value => value.replace(/\s/g, '')).pipe(z.string().regex(/^[0-9]{7}$/, 'Номер — 7 цифр'));
 const profileSchema = z.object({
   firstName: nameSchema.optional(), lastName: nameSchema.optional(), phone: phoneSchema.optional(), email: emailSchema.optional(),
+  passportSeries: passportSeriesSchema.optional(), passportNumber: passportNumberSchema.optional(),
   currentPassword: loginPasswordSchema.optional(), newPassword: newPasswordSchema.optional(),
-}).strict();
+}).strict().refine(input => (input.passportSeries === undefined) === (input.passportNumber === undefined), { path: ['passportNumber'], message: 'Укажите серию и номер паспорта' });
 const updateProfile: RequestHandler = async (req, res) => {
   const input = profileSchema.parse(req.body);
   const user = await db.user.findUniqueOrThrow({ where: { id: me(req) }, include: { courierProfile: true } });
@@ -89,6 +95,7 @@ const updateProfile: RequestHandler = async (req, res) => {
         name: `${firstName} ${lastName}`.trim(), phone: input.phone, email: input.email, ...(passwordHash ? { passwordHash } : {}),
         courierProfile: { update: { firstName, lastName } },
       } });
+      if (input.passportSeries && input.passportNumber) await setCourierPassport(user.id, input.passportSeries, input.passportNumber, tx);
       // A new password ends every other session; this device stays signed in.
       if (passwordHash) await tx.session.deleteMany({ where: { userId: user.id, id: { not: req.user!.sessionId } } });
     });
@@ -115,9 +122,14 @@ courierRouter.patch('/work-mode', async (req, res) => {
   res.json({ data: await courierAccount(me(req)) });
 });
 courierRouter.patch('/service-area', async (req, res) => {
-  const { city, zone } = serviceAreaSchema.parse(req.body);
-  await setCourierServiceArea(me(req), city, zone);
+  const { city } = serviceAreaSchema.parse(req.body);
+  await setCourierServiceArea(me(req), city);
   res.json({ data: await courierAccount(me(req)) });
+});
+/** Selfie for UzBite admission (multipart field `file`). Private: never shown to restaurants. */
+const facePhotoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024, files: 1, fields: 0 } });
+courierRouter.post('/identity/face-photo', rateLimit('courier-face-photo', 30, 3600), facePhotoUpload.single('file'), async (req, res) => {
+  res.status(201).json({ data: await setCourierFacePhoto(me(req), req.file) });
 });
 courierRouter.patch('/onboarding', async (req, res) => {
   const input = z.object({ step: z.number().int().min(1).max(4).optional(), complete: z.literal(true).optional() }).strict()

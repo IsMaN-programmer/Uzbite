@@ -28,6 +28,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: { package: development ? 'uz.uzbite.courier.dev' : 'uz.uzbite.courier', softwareKeyboardLayoutMode: 'resize' },
   ios: { bundleIdentifier: development ? 'uz.uzbite.courier.dev' : 'uz.uzbite.courier', supportsTablet: true },
   web: { bundler: 'metro' },
-  plugins: [['expo-build-properties', { android: { usesCleartextTraffic: development } }]],
+  plugins: [
+    ['expo-build-properties', { android: { usesCleartextTraffic: development } }],
+    // The face photo for courier admission is the only use of the camera and photo library.
+    ['expo-image-picker', { cameraPermission: 'UzBite uses the camera to take your face photo for courier approval.', photosPermission: 'UzBite lets you choose a face photo for courier approval.', microphonePermission: false }],
+  ],
   extra: { variant, allowCustomServer: development },
 });

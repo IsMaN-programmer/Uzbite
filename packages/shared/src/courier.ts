@@ -18,8 +18,35 @@ export type CourierApprovalStatus = 'PENDING' | 'APPROVED' | 'SUSPENDED';
 export type CourierAvailability = 'AVAILABLE' | 'UNAVAILABLE' | 'BUSY';
 export type DeliveryIssueType = 'CANCELLATION_REQUEST' | 'HANDOFF_CODE_UNAVAILABLE';
 
-/** Work areas used for matching free couriers. Matching is by configured zone, never by live GPS. */
-export const SERVICE_CITIES = [{ code: 'tashkent', name: { ru: 'Ташкент', uz: 'Toshkent', en: 'Tashkent' } }] as const;
+/**
+ * Cities of Uzbekistan a free courier can work in. Free deliveries are matched by the courier's
+ * chosen city and the restaurant's city — never by live GPS. Tashkent first, the rest alphabetical.
+ */
+export const SERVICE_CITIES = [
+  { code: 'tashkent', name: { ru: 'Ташкент', uz: 'Toshkent', en: 'Tashkent' } },
+  { code: 'almalyk', name: { ru: 'Алмалык', uz: 'Olmaliq', en: 'Almalyk' } },
+  { code: 'andijan', name: { ru: 'Андижан', uz: 'Andijon', en: 'Andijan' } },
+  { code: 'angren', name: { ru: 'Ангрен', uz: 'Angren', en: 'Angren' } },
+  { code: 'bukhara', name: { ru: 'Бухара', uz: 'Buxoro', en: 'Bukhara' } },
+  { code: 'gulistan', name: { ru: 'Гулистан', uz: 'Guliston', en: 'Gulistan' } },
+  { code: 'jizzakh', name: { ru: 'Джизак', uz: 'Jizzax', en: 'Jizzakh' } },
+  { code: 'karshi', name: { ru: 'Карши', uz: 'Qarshi', en: 'Karshi' } },
+  { code: 'kokand', name: { ru: 'Коканд', uz: 'Qo‘qon', en: 'Kokand' } },
+  { code: 'margilan', name: { ru: 'Маргилан', uz: 'Marg‘ilon', en: 'Margilan' } },
+  { code: 'navoi', name: { ru: 'Навои', uz: 'Navoiy', en: 'Navoi' } },
+  { code: 'namangan', name: { ru: 'Наманган', uz: 'Namangan', en: 'Namangan' } },
+  { code: 'nukus', name: { ru: 'Нукус', uz: 'Nukus', en: 'Nukus' } },
+  { code: 'nurafshon', name: { ru: 'Нурафшан', uz: 'Nurafshon', en: 'Nurafshon' } },
+  { code: 'samarkand', name: { ru: 'Самарканд', uz: 'Samarqand', en: 'Samarkand' } },
+  { code: 'termez', name: { ru: 'Термез', uz: 'Termiz', en: 'Termez' } },
+  { code: 'urgench', name: { ru: 'Ургенч', uz: 'Urganch', en: 'Urgench' } },
+  { code: 'fergana', name: { ru: 'Фергана', uz: 'Farg‘ona', en: 'Fergana' } },
+  { code: 'khiva', name: { ru: 'Хива', uz: 'Xiva', en: 'Khiva' } },
+  { code: 'chirchik', name: { ru: 'Чирчик', uz: 'Chirchiq', en: 'Chirchik' } },
+  { code: 'shakhrisabz', name: { ru: 'Шахрисабз', uz: 'Shahrisabz', en: 'Shakhrisabz' } },
+] as const;
+export type ServiceCityCode = typeof SERVICE_CITIES[number]['code'];
+/** Tashkent districts of a restaurant, shown on an offer for orientation only (not used for matching). */
 export const SERVICE_ZONES = [
   { code: 'almazar', city: 'tashkent', name: { ru: 'Алмазарский район', uz: 'Olmazor tumani', en: 'Almazar district' } },
   { code: 'bektemir', city: 'tashkent', name: { ru: 'Бектемирский район', uz: 'Bektemir tumani', en: 'Bektemir district' } },
@@ -35,6 +62,9 @@ export const SERVICE_ZONES = [
   { code: 'yunusabad', city: 'tashkent', name: { ru: 'Юнусабадский район', uz: 'Yunusobod tumani', en: 'Yunusabad district' } },
 ] as const;
 export type ServiceZoneCode = typeof SERVICE_ZONES[number]['code'];
+/** Uzbek passport or ID card: series of two Latin letters and a 7-digit number (AA 1234567). */
+export const PASSPORT_SERIES_PATTERN = /^[A-Z]{2}$/;
+export const PASSPORT_NUMBER_PATTERN = /^[0-9]{7}$/;
 
 export interface AuthTokens { accessToken: string; refreshToken: string; accessExpiresAt: string }
 
@@ -46,12 +76,17 @@ export interface CourierProfileDto {
   workMode: CourierWorkMode | null;
   isAvailable: boolean;
   availability: CourierAvailability;
-  city: string;
-  serviceZone: string | null;
+  /** City for free deliveries; null until the courier chooses one. */
+  city: string | null;
   onboardingStep: number;
   onboardingCompleted: boolean;
   /** What the server will currently allow; the client only mirrors it. */
   permissions: { restaurantMode: boolean; freelanceMode: boolean; reason: string | null };
+  /**
+   * Identity for UzBite admission. Served only to the courier themself — restaurants never see the
+   * passport or the face photo. Locked once the courier is approved.
+   */
+  identity: { passportSeries: string | null; passportNumber: string | null; facePhoto: boolean; locked: boolean };
 }
 export interface CourierAccount {
   id: string;

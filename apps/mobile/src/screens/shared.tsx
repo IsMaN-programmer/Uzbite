@@ -1,11 +1,12 @@
-import { useCallback, useRef, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { Image, Platform, Pressable, Text, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { SERVICE_ZONES, type CourierAccount, type CourierAvailability, type CourierInvitationDto } from '@uzbite/shared';
-import { courierApi } from '../api/courier';
+import { PASSPORT_NUMBER_PATTERN, PASSPORT_SERIES_PATTERN, SERVICE_CITIES, type CourierAccount, type CourierAvailability, type CourierInvitationDto } from '@uzbite/shared';
+import { courierApi, type PhotoInput } from '../api/courier';
 import { usePrefs } from '../prefs';
 import { useConnectivity } from '../realtime';
-import { initials } from '../lib/format';
+import { initials, passportNumberInput, passportSeriesInput } from '../lib/format';
 import { Icon } from '../ui/Icon';
 import { AppText, Badge, Banner, Button, Card, Field } from '../ui/kit';
 
@@ -54,7 +55,8 @@ export function PermissionNotice({ account }: { account: CourierAccount }) {
   const { t } = usePrefs();
   const { permissions, workMode } = account.profile;
   if (permissions.reason === 'SUSPENDED') return <Banner tone="danger" icon="shield" text={t('permSUSPENDED')} />;
-  if (permissions.reason) return <Banner tone="warning" icon="shield" text={t('permNO_AFFILIATION_OR_APPROVAL')} />;
+  // No restaurant link and no UzBite approval yet: no warning, the courier simply waits.
+  if (permissions.reason) return null;
   if (workMode === 'RESTAURANT' && !permissions.restaurantMode) return <Banner tone="warning" text={t('permRestaurant')} />;
   if (workMode === 'FREELANCE' && !permissions.freelanceMode) return <Banner tone="warning" text={t('permFreelance')} />;
   return null;
@@ -97,25 +99,106 @@ export function InvitationPanel() {
   );
 }
 
-/** City (only Tashkent today) and district from the shared contract. Matching never uses GPS. */
-export function ZonePicker({ value, onChange }: { value: string | null; onChange: (zone: string) => void }) {
+/** City of Uzbekistan for free deliveries. Matching is by city, never by GPS. Tashkent first. */
+export function CityPicker({ value, onChange }: { value: string | null; onChange: (city: string) => void }) {
   const { t, colors, language } = usePrefs();
+  const cities = useMemo(() => {
+    const [capital, ...rest] = SERVICE_CITIES;
+    return [capital, ...[...rest].sort((a, b) => a.name[language].localeCompare(b.name[language], language))];
+  }, [language]);
   return (
-    <View style={{ gap: 8 }}>
+    <View style={{ gap: 8 }} accessibilityRole="radiogroup" accessibilityLabel={t('areaCity')}>
       <AppText variant="label" muted>{t('areaCity')}</AppText>
-      <Badge tone="accent" text={language === 'ru' ? 'Ташкент' : language === 'uz' ? 'Toshkent' : 'Tashkent'} />
-      <AppText variant="label" muted>{t('areaZone')}</AppText>
-      {SERVICE_ZONES.map(zone => {
-        const active = zone.code === value;
+      {cities.map(city => {
+        const active = city.code === value;
         return (
-          <Pressable key={zone.code} accessibilityRole="radio" accessibilityState={{ checked: active }} onPress={() => onChange(zone.code)}
+          <Pressable key={city.code} accessibilityRole="radio" accessibilityState={{ checked: active }} onPress={() => onChange(city.code)}
             style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 14, borderWidth: 1, paddingHorizontal: 14, borderColor: active ? colors.accent : colors.border, backgroundColor: active ? colors.accentSoft : colors.surface }}>
             <Icon name={active ? 'check' : 'location'} color={active ? colors.accentText : colors.muted} size={18} />
-            <AppText style={{ flex: 1 }}>{zone.name[language]}</AppText>
+            <AppText style={{ flex: 1 }}>{city.name[language]}</AppText>
           </Pressable>
         );
       })}
       <AppText variant="caption" muted>{t('areaHint')}</AppText>
+    </View>
+  );
+}
+
+export const validPassport = (series: string, number: string) => PASSPORT_SERIES_PATTERN.test(series) && PASSPORT_NUMBER_PATTERN.test(number);
+/**
+ * Passport series (2 letters, Cyrillic look-alikes converted) and number (7 digits) side by side.
+ * No maxLength: the input filters cut the length, so a pasted "AA 1234567" keeps every digit.
+ */
+export function PassportFields({ series, number, onSeries, onNumber, editable = true }: { series: string; number: string; onSeries: (value: string) => void; onNumber: (value: string) => void; editable?: boolean }) {
+  const { t } = usePrefs();
+  const seriesError = series && !PASSPORT_SERIES_PATTERN.test(series) ? t('passportSeriesInvalid') : undefined;
+  const numberError = number && !PASSPORT_NUMBER_PATTERN.test(number) ? t('passportNumberInvalid') : undefined;
+  return (
+    <View style={{ gap: 6 }}>
+      <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
+        <View style={{ width: 104 }}>
+          <Field label={t('passportSeries')} value={series} onChangeText={value => onSeries(passportSeriesInput(value))} editable={editable} error={seriesError}
+            autoCapitalize="characters" autoCorrect={false} placeholder="AA" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Field label={t('passportNumber')} value={number} onChangeText={value => onNumber(passportNumberInput(value))} editable={editable} error={numberError}
+            keyboardType="number-pad" autoCorrect={false} placeholder="1234567" />
+        </View>
+      </View>
+      <AppText variant="caption" muted>{t('passportHint')}</AppText>
+    </View>
+  );
+}
+
+/**
+ * Selfie for UzBite admission: front camera (a file picker in the browser) or the gallery.
+ * Uploaded at once; the server keeps it private and the account says whether one is stored.
+ */
+export function FacePhotoField({ account }: { account: CourierAccount }) {
+  const { t, colors } = usePrefs();
+  const queryClient = useQueryClient();
+  const { facePhoto, locked } = account.profile.identity;
+  const [preview, setPreview] = useState<string | null>(null);
+  const action = useAction();
+  const send = (asset: ImagePicker.ImagePickerAsset) => action.run(async () => {
+    const photo: PhotoInput = { uri: asset.uri, file: asset.file, fileName: asset.fileName, mimeType: asset.mimeType };
+    queryClient.setQueryData(['me'], await courierApi.uploadFacePhoto(photo));
+    setPreview(asset.uri);
+  });
+  const pick = async (source: 'camera' | 'gallery') => {
+    action.setError('');
+    try {
+      if (source === 'camera' && Platform.OS !== 'web') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) { action.setError(t('cameraDenied')); return; }
+      }
+      const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.6, exif: false, allowsEditing: false };
+      const result = source === 'camera'
+        ? await ImagePicker.launchCameraAsync({ ...options, cameraType: ImagePicker.CameraType.front })
+        : await ImagePicker.launchImageLibraryAsync(options);
+      const asset = result.canceled ? null : result.assets[0];
+      if (asset) await send(asset);
+    } catch { action.setError(t('cameraDenied')); }
+  };
+  return (
+    <View style={{ gap: 10 }}>
+      <AppText variant="label">{t('facePhoto')}</AppText>
+      <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
+        <View accessibilityLabel={facePhoto ? t('facePhotoReady') : t('facePhoto')}
+          style={{ width: 96, height: 120, borderRadius: 16, overflow: 'hidden', borderWidth: 1.5, borderStyle: facePhoto ? 'solid' : 'dashed', borderColor: facePhoto ? colors.success : colors.border, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}>
+          {preview ? <Image source={{ uri: preview }} style={{ width: '100%', height: '100%' }} resizeMode="cover" accessibilityIgnoresInvertColors />
+            : <Icon name={facePhoto ? 'check' : 'user'} color={facePhoto ? colors.success : colors.muted} size={36} />}
+        </View>
+        <View style={{ flex: 1, gap: 6 }}>
+          {facePhoto ? <Badge tone="success" text={t('facePhotoReady')} /> : null}
+          <AppText variant="caption" muted>{locked ? t('identityLocked') : action.busy ? t('facePhotoUploading') : t('facePhotoHint')}</AppText>
+        </View>
+      </View>
+      {action.error ? <Banner tone="danger" text={action.error} /> : null}
+      {!locked ? <>
+        <Button title={facePhoto ? t('facePhotoRetake') : t('facePhotoTake')} icon="camera" variant={facePhoto ? 'secondary' : 'primary'} loading={action.busy} onPress={() => void pick('camera')} />
+        <Button title={t('facePhotoGallery')} icon="image" variant="ghost" disabled={action.busy} onPress={() => void pick('gallery')} />
+      </> : null}
     </View>
   );
 }
