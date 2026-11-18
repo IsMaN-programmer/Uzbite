@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '../config/database.js';
 import { assert } from '../utils/errors.js';
@@ -11,25 +10,15 @@ import { ioEvent } from '../services/realtime.js';
 import { paginationSchema, pageMetadata } from '../utils/pagination.js';
 import { notificationDto } from '../services/notifications.js';
 import { deliveryAddressForUser, deliveryEstimateFor } from '../services/delivery.js';
+import { discoverRestaurants, discoveryQuery } from '../services/restaurant-discovery.js';
 
 export const catalogRouter = Router();
 catalogRouter.get('/restaurants', async (req, res) => {
-  const { page, pageSize } = paginationSchema.parse(req.query);
-  const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 100) : '';
-  const category = typeof req.query.category === 'string' ? req.query.category.trim().slice(0, 100) : '';
-  const filters = z.object({ open: z.enum(['true', 'false']).optional(), freeDelivery: z.enum(['true', 'false']).optional(), sort: z.enum(['name', 'delivery', 'popular']).default('name') }).parse(req.query);
-  const where = {
-    ...(q ? { OR: [{ name: { contains: q, mode: 'insensitive' as const } }, { description: { contains: q, mode: 'insensitive' as const } }, { dishes: { some: { name: { contains: q, mode: 'insensitive' as const } } } }, { categories: { some: { name: { contains: q, mode: 'insensitive' as const } } } }] } : {}),
-    ...(category ? { categories: { some: { name: { contains: category, mode: 'insensitive' as const } } } } : {}),
-    ...(filters.open === 'true' ? { isOpen: true } : {}),
-    ...(filters.freeDelivery === 'true' ? { deliveryFee: 0 } : {}),
-  };
-  const orderBy: Prisma.RestaurantOrderByWithRelationInput[] = [
-    ...(filters.sort === 'delivery' ? [{ deliveryFee: 'asc' as const }] : filters.sort === 'popular' ? [{ follows: { _count: 'desc' as const } }] : []),
-    { name: 'asc' }, { id: 'asc' },
-  ];
-  const [items, total, delivery] = await Promise.all([db.restaurant.findMany({ where, include: { ...restaurantInclude(req.user?.id), categories: { select: { name: true }, orderBy: { sortOrder: 'asc' } } }, skip: (page - 1) * pageSize, take: pageSize, orderBy }), db.restaurant.count({ where }), deliveryAddressForUser(req.user?.id)]);
-  res.json({ data: jsonValue({ items: items.map(item => { const { categories, ...restaurant } = item; return { ...restaurantDto(restaurant), cuisines: categories.map(category => category.name), deliveryEstimate: deliveryEstimateFor(restaurant, delivery.address) }; }), page, pageSize, total, hasMore: page * pageSize < total }) });
+  const input = discoveryQuery.parse(req.query);
+  const userId = req.user?.id;
+  const [result, delivery] = await Promise.all([discoverRestaurants(input, userId), deliveryAddressForUser(userId)]);
+  const items = result.items.map(restaurant => ({ ...restaurant, deliveryEstimate: deliveryEstimateFor(restaurant, delivery.address) }));
+  res.json({ data: jsonValue({ ...result, items }) });
 });
 catalogRouter.get('/categories', async (_req, res) => {
   const items = await db.restaurantCategory.findMany({ distinct: ['name'], select: { name: true }, orderBy: { name: 'asc' } });

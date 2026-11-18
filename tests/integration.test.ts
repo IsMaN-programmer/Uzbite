@@ -125,6 +125,13 @@ test('Catalog searches restaurants, dishes and categories with real media; profi
   assert.equal(((detail.data as Json).addressText as string).includes('демонстрационная точка'), false);
   const feed = await alice.request('GET', '/feed'); assert.equal(feed.status, 200);
   assert.ok((feed.data as { items: { media: unknown[] }[] }).items.every(post => post.media.length));
+  const pastaPost = await alice.request('GET', '/posts/post-rest-basilico');
+  assert.equal(pastaPost.status, 200);
+  const pasta = (pastaPost.data as { dish: Json }).dish;
+  assert.equal(pasta.weightGrams, 300);
+  assert.equal(pasta.catalogCategory, 'FOREIGN');
+  const samsa = ((detail.data as Json).dishes as Json[]).find(dish => dish.id === 'dish-samsa');
+  assert.equal(samsa?.piecesPerPortion, 2);
   const opened = await alice.request('GET', '/restaurants?open=true');
   assert.equal(opened.status, 200);
   assert.equal((opened.data as Json).total, await db.restaurant.count({ where: { isOpen: true } }));
@@ -142,6 +149,24 @@ test('Catalog searches restaurants, dishes and categories with real media; profi
   const second = await alice.request('GET', '/restaurants?sort=delivery&pageSize=1&page=2');
   assert.notEqual(((first.data as Json).items as Json[])[0]?.id, ((second.data as Json).items as Json[])[0]?.id);
   assert.equal((await alice.request('GET', '/restaurants?sort=fastest')).status, 400);
+});
+test('Discovery uses dish categories and ranks their available prices before paginating', async () => {
+  const menus = await db.dish.groupBy({
+    by: ['restaurantId'], where: { catalogCategory: 'DRINKS', isAvailable: true }, _min: { price: true }, _max: { price: true },
+  });
+  assert.ok(menus.length >= 2, 'The demo catalog must include drinks at multiple restaurants');
+  for (const [mode, field] of [['price-asc', '_min'], ['price-desc', '_max']] as const) {
+    const prices = new Map(menus.map(menu => [menu.restaurantId, menu[field].price!.toNumber()]));
+    const expected = [...prices.values()].sort((a, b) => mode === 'price-asc' ? a - b : b - a);
+    const firstPages = await Promise.all([1, 2].map(page => alice.request('GET', `/restaurants?category=DRINKS&sort=${mode}&pageSize=1&page=${page}`)));
+    const ids = firstPages.map(result => {
+      assert.equal(result.status, 200);
+      assert.equal((result.data as Json).total, menus.length);
+      return ((result.data as Json).items as Json[])[0]!.id as string;
+    });
+    assert.notEqual(ids[0], ids[1]);
+    assert.deepEqual(ids.map(id => prices.get(id)), expected.slice(0, 2));
+  }
 });
 test('Likes, replies, follows persist and verified reviews require a delivered owned order', async () => {
   assert.equal((await alice.request('PUT', '/posts/post-rest-osh/like', { liked: true })).status, 200);
@@ -359,6 +384,11 @@ test('Verified review enforces delivered, owner, uniqueness and updates restaura
   assert.equal((await alice.request('POST', '/restaurants/rest-osh/reviews', input)).status, 201);
   assert.equal((await alice.request('POST', '/restaurants/rest-osh/reviews', input)).status, 409);
   const restaurant = await alice.request('GET', '/restaurants/rest-osh'); assert.equal((restaurant.data as Json).rating, 5);
+  const ranked = await alice.request('GET', '/restaurants?sort=rating&pageSize=50');
+  assert.equal(ranked.status, 200);
+  const ratings = ((ranked.data as Json).items as Json[]).map(item => Number(item.rating ?? -1));
+  assert.ok(ratings.includes(5));
+  assert.deepEqual(ratings, [...ratings].sort((a, b) => b - a));
 });
 test('Profile nickname cooldown and sensitive email/password changes are enforced', async () => {
   const race = await Promise.all([alice.request('PATCH', '/profile', { nickname: `changed_${suffix}` }), alice.request('PATCH', '/profile', { nickname: `raced_${suffix}` })]);

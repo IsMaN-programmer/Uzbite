@@ -28,7 +28,7 @@
 
 | Метод и путь | Назначение |
 | --- | --- |
-| `GET /api/restaurants?q=&category=&open=true&freeDelivery=true&sort=name&page=&pageSize=` | Поиск, фильтры открытых/бесплатной доставки; sort: name, delivery (стоимость доставки), popular (подписчики); `{items,page,pageSize,total,hasMore}`, cuisines в каждой записи |
+| `GET /api/restaurants?q=&category=&open=true&sort=all&page=&pageSize=` | Каталог ресторанов с фильтром по доступным блюдам выбранной категории. Сортировка `all` (по умолчанию), `price-asc`, `price-desc`, `popular`, `rating`. Ответ `{items,page,pageSize,total,hasMore}` с `cuisines` в каждой записи |
 | `GET /api/categories` | Собственные категории ресторана |
 | `GET /api/restaurants/:id` | Профиль по ID или slug: меню, категории, публикации, проверенные отзывы |
 | `GET /api/feed?following=true&page=&pageSize=` | Общая лента либо лента подписок |
@@ -38,6 +38,8 @@
 | `GET /api/posts/:id/comments?page=&pageSize=` | Корневые комментарии с ответами |
 | `POST /api/posts/:id/comments` | `{text,parentId?}`; ответ только на корневой комментарий той же публикации |
 | `POST /api/restaurants/:id/reviews` | `{orderId,rating,text}`; только собственный доставленный заказ, один отзыв на заказ |
+
+В `category` передаётся значение `Dish.catalogCategory` из `CATALOG_CATEGORIES`. Цена для сортировки — минимум или максимум среди доступных блюд в выбранной категории либо во всём меню, если категория не выбрана. `rating` сортирует по средней оценке подтверждённых отзывов. Рестораны без цены или оценки идут в конце соответствующей выдачи.
 
 Рейтинг рассчитывается по проверенным отзывам. Отсутствие отзывов возвращает `rating:null`. Приватные реквизиты не включаются в публичные карточки. Поиск не обращается к Yandex Organization Search.
 

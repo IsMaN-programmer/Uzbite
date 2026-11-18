@@ -157,13 +157,31 @@ model RestaurantCategory {
   @@unique([restaurantId, name])
 }
 
+enum CatalogCategory {
+  NATIONAL
+  FAST_FOOD
+  FOREIGN
+  EASTERN
+  ASIAN
+  DRINKS
+  SALADS
+  MEAT
+  SNACKS
+  OTHER
+}
+
 model Dish {
   id           String             @id @default(cuid())
   restaurantId String
   categoryId   String
+  catalogCategory CatalogCategory @default(OTHER)
   name         String
   description  String
   price        Decimal            @db.Decimal(14, 2)
+  weightGrams  Int?
+  volumeMl     Int?
+  piecesPerPortion Int?
+  diameterCm   Int?
   imageUrl     String
   isAvailable  Boolean            @default(true)
   createdAt    DateTime           @default(now())
@@ -174,6 +192,7 @@ model Dish {
   orderItems   OrderItem[]
 
   @@index([restaurantId, isAvailable])
+  @@index([catalogCategory, isAvailable, restaurantId])
   @@index([name])
 }
 

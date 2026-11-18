@@ -1,97 +1,156 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Post, RestaurantSummary } from '@uzbite/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApp } from '../context/AppContext';
 import { api, friendlyError } from '../lib/api';
-import { nextCollectionPage, type PaginatedCollection } from '../lib/pagination';
 import { Icon } from '../components/icons/Icon';
-import { NotificationPanel } from '../components/NotificationPanel';
 import { AddressBook } from '../components/AddressBook';
 import { ProfileEditor, type EditableProfile } from '../components/ProfileEditor';
+import { ProfileFollowing, ProfileLikes } from '../components/ProfileCollections';
 import { OrderHistory } from '../components/OrderHistory';
-import { FormError, LoadingCards, Modal, primaryClass, secondaryClass, useCopy } from '../components/AccountPrimitives';
+import { FormError, Modal, primaryClass, secondaryClass, useCopy } from '../components/AccountPrimitives';
 
-interface Profile extends EditableProfile { id: string; avatarUrl: string | null; counts: { likes: number; follows: number; orders: number } }
-type ProfileTab = 'likes' | 'follows' | 'orders';
+interface Profile extends EditableProfile {
+  id: string;
+  avatarUrl: string | null;
+  counts: { likes: number; follows: number; orders: number };
+}
 
 export function ProfilePage() {
   const { user, language, setLanguage, theme, setTheme, refreshUser } = useApp();
   const c = useCopy();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const avatarInput = useRef<HTMLInputElement>(null);
-  const [tab, setTab] = useState<ProfileTab>('likes');
-  const [notifications, setNotifications] = useState(false);
+  const detailTitle = useRef<HTMLHeadingElement>(null);
   const [editing, setEditing] = useState(false);
-  const [addresses, setAddresses] = useState(false);
-  const [faq, setFaq] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
-  const location = useLocation();
-  useEffect(() => { const section = new URLSearchParams(location.search).get('section'); if (section === 'addresses') setAddresses(true); if (section === 'help') setFaq(true); if (section === 'likes' || section === 'follows' || section === 'orders') setTab(section); }, [location.key, location.search]);
-  function selectTab(next: ProfileTab) {
-    setTab(next);
-    const params = new URLSearchParams(location.search);
-    params.set('section', next);
-    navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
-  }
-  const profile = useQuery({ queryKey: ['profile'], queryFn: async () => (await api.get<{ data: Profile }>('/profile')).data.data, enabled: Boolean(user) });
-  const likes = useInfiniteQuery({
-    queryKey: ['profile', 'likes'], initialPageParam: 1,
-    queryFn: async ({ pageParam }) => (await api.get<PaginatedCollection<Post>>('/profile/likes', { params: { page: pageParam, pageSize: 12 } })).data,
-    getNextPageParam: nextCollectionPage, enabled: Boolean(user) && tab === 'likes',
+  const section = new URLSearchParams(location.search).get('section');
+  const languages = { ru: 'Русский', uz: 'O‘zbekcha', en: 'English' };
+  const light = c('Светлое', 'Yorug‘', 'Light');
+  const dark = c('Тёмное', 'Tungi', 'Dark');
+  const profile = useQuery({
+    queryKey: ['profile'],
+    queryFn: async ({ signal }) => (await api.get<{ data: Profile }>('/profile', { signal })).data.data,
+    enabled: Boolean(user),
   });
-  const follows = useInfiniteQuery({
-    queryKey: ['profile', 'follows'], initialPageParam: 1,
-    queryFn: async ({ pageParam }) => (await api.get<PaginatedCollection<RestaurantSummary>>('/profile/follows', { params: { page: pageParam, pageSize: 12 } })).data,
-    getNextPageParam: nextCollectionPage, enabled: Boolean(user) && tab === 'follows',
-  });
-  const likedPosts = likes.data?.pages.flatMap((page) => page.data) ?? [];
-  const followedRestaurants = follows.data?.pages.flatMap((page) => page.data) ?? [];
-  const collection = tab === 'likes' ? likes : follows;
-  const avatar = useMutation({ mutationFn: async (file: File) => { const form = new FormData(); form.append('file', file); return api.post('/uploads/avatar', form); }, onSuccess: async () => { await refreshUser(); void queryClient.invalidateQueries({ queryKey: ['profile'] }); } });
-  const logout = useMutation({ mutationFn: () => api.post('/auth/logout'), onSuccess: async () => { queryClient.clear(); await refreshUser(); navigate('/auth', { replace: true }); } });
-  const person = profile.data || user;
-  if (!user) return <div className="mx-auto max-w-lg px-6 py-20 text-center"><h1 className="text-3xl font-semibold">{c('Ваш профиль', 'Profilingiz', 'Your profile')}</h1><p className="my-5 text-sm text-[var(--muted)]">{c('Войдите, чтобы сохранять любимое и управлять заказами.', 'Sevimlilarni saqlash va buyurtmalarni boshqarish uchun kiring.', 'Sign in to save your favorites and manage your orders.')}</p><Link className={primaryClass} to="/auth" state={{ from: '/profile' }}>{c('Войти', 'Kirish', 'Sign in')}</Link></div>;
-  return <div className="mx-auto max-w-6xl md:px-4 md:py-2">
-    <header className="mb-6 flex items-center justify-between gap-4"><h1 className="text-2xl font-bold tracking-tight md:text-3xl">{c('Профиль', 'Profil', 'Profile')}</h1><button type="button" className="profile-notifications icon-button md:hidden" onClick={() => setNotifications(true)} aria-label={c('Уведомления', 'Bildirishnomalar', 'Notifications')}><Icon name="notifications" size={20}/></button></header>
-    <section className="relative mb-7 overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface)]">
-      <div className="p-5 sm:p-7">
-        <div className="mb-5 flex items-center justify-between gap-4">
-          <button type="button" disabled={avatar.isPending} onClick={() => avatarInput.current?.click()} className="group relative flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface)] text-3xl font-semibold text-orange-600 sm:size-24" aria-label={c('Изменить фото', 'Rasmni o‘zgartirish', 'Change profile photo')}>
-            {person?.avatarUrl ? <img src={person.avatarUrl} alt={person.name} className="h-full w-full object-cover" /> : person?.username?.slice(0, 1).toUpperCase()}
-            <span className="absolute bottom-1 right-1 flex size-6 items-center justify-center rounded-full border-2 border-[var(--surface)] bg-brand text-white"><Icon name="camera" className="size-3.5" /></span>
-          </button>
-          <input ref={avatarInput} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) avatar.mutate(file); event.target.value = ''; }} />
-          <button type="button" onClick={() => setEditing(true)} disabled={!profile.data} className={secondaryClass}><Icon name="edit" size={17}/><span className="text-xs">{c('Редактировать', 'Tahrirlash', 'Edit profile')}</span></button>
-        </div>
-        <h2 className="text-xl font-semibold tracking-tight [overflow-wrap:anywhere] sm:text-2xl">{person?.username}</h2>
-        {person?.bio && <p className="mt-3 max-w-xl text-sm leading-relaxed text-[var(--muted)] [overflow-wrap:anywhere]">{person.bio}</p>}
-        <FormError message={avatar.error ? friendlyError(avatar.error) : ''} />{avatar.isPending && <p role="status" className="mt-3 text-xs text-[var(--muted)]">{c('Загружаем фото…', 'Rasm yuklanmoqda…', 'Uploading photo…')}</p>}
-        <div className="mt-6 grid grid-cols-3 divide-x divide-[var(--border)] border-t border-[var(--border)] pt-5">{[{ name: c('Подписки', 'Obunalar', 'Following'), count: profile.data?.counts.follows, onClick: () => selectTab('follows'), icon: 'restaurant' }, { name: c('Заказы', 'Buyurtmalar', 'Orders'), count: profile.data?.counts.orders, onClick: () => selectTab('orders'), icon: 'orders' }, { name: c('Понравившиеся', 'Yoqtirilganlar', 'Liked'), count: profile.data?.counts.likes, onClick: () => selectTab('likes'), icon: 'heart' }].map((item) => <button key={item.icon} type="button" onClick={item.onClick} className="group flex flex-col items-center gap-1 text-center transition hover:text-orange-600"><strong className="text-xl font-semibold tabular-nums">{item.count ?? '—'}</strong><span className="text-[10px] text-[var(--muted)] sm:text-xs">{item.name}</span></button>)}</div>
-      </div>
-    </section>
-    {profile.isError && <div className="mb-5"><FormError message={friendlyError(profile.error)} /></div>}
-    <div className="grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_300px]">
-      <section className="min-w-0">{tab === 'follows' && <Link to="/feed?following=true" className={`${secondaryClass} profile-following-feed mb-5 w-full md:hidden`}><Icon name="video" size={18}/>{c('Лента подписок', 'Obunalar tasmasi', 'Following feed')}</Link>}<div className="profile-tabs" role="group" aria-label={c('Разделы профиля', 'Profil bo‘limlari', 'Profile sections')}>{[{ key: 'likes' as const, label: c('Понравившиеся', 'Yoqtirilganlar', 'Liked posts'), icon: 'heart' }, { key: 'follows' as const, label: c('Подписки', 'Obunalar', 'Following'), icon: 'restaurant' }, { key: 'orders' as const, label: c('История заказов', 'Buyurtmalar tarixi', 'Order history'), icon: 'history' }].map((item) => <button key={item.key} type="button" onClick={() => selectTab(item.key)} aria-pressed={tab === item.key} aria-controls="profile-collection"><Icon name={item.icon} size={19}/><span>{item.label}</span></button>)}</div>
-      <div id="profile-collection">{tab === 'orders' ? <OrderHistory/> : <>
-        {tab === 'likes' ? likes.isPending ? <LoadingCards /> : likes.isError && !likes.data ? <FormError message={friendlyError(likes.error)} /> : likedPosts.length ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{likedPosts.map((post) => { const thumbnail = post.media.find((media) => media.posterUrl)?.posterUrl || post.dish?.imageUrl || post.restaurant.coverUrl; return <Link key={post.id} to={`/feed?post=${encodeURIComponent(post.id)}`} className="group relative aspect-[3/4] overflow-hidden rounded-2xl bg-[var(--surface)]"><img src={thumbnail} alt={post.dish?.name || post.caption} loading="lazy" className="h-full w-full object-cover transition duration-500 group-hover:scale-105" /><div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" /><span className="absolute left-3 top-3 flex size-7 items-center justify-center rounded-full bg-black/20 text-white backdrop-blur-md"><Icon name="video" className="size-3.5" /></span><div className="absolute inset-x-3 bottom-3 text-white"><p className="truncate text-xs font-semibold">{post.dish?.name || post.restaurant.name}</p><p className="mt-1 truncate text-[10px] text-white/70">{post.restaurant.name}</p></div></Link>; })}</div> : <EmptyCollection icon="heart" title={c('Нет понравившихся публикаций', 'Yoqtirilgan postlar yo‘q', 'No liked posts')} text={c('Лайкайте публикации, чтобы возвращаться к ним здесь.', 'Postlarga layk bosing va ularga shu yerdan qayting.', 'Like posts to find them here later.')} /> : follows.isPending ? <LoadingCards /> : follows.isError && !follows.data ? <FormError message={friendlyError(follows.error)} /> : followedRestaurants.length ? <div className="space-y-3">{followedRestaurants.map((restaurant) => <Link to={`/restaurants/${restaurant.id}`} key={restaurant.id} className="flex items-center gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 transition hover:border-orange-400"><img src={restaurant.logoUrl || restaurant.coverUrl} alt="" className="size-14 rounded-2xl object-cover" /><div className="min-w-0 flex-1"><h3 className="truncate text-sm font-semibold">{restaurant.name}</h3><p className="mt-1 truncate text-xs text-[var(--muted)]">{restaurant.addressText}</p></div><Icon name="arrow" className="shrink-0 text-orange-600" /></Link>)}</div> : <EmptyCollection icon="restaurant" title={c('Пока нет подписок', 'Hozircha obunalar yo‘q', 'No subscriptions yet')} text={c('Подписывайтесь на любимые рестораны, чтобы видеть их новые публикации.', 'Sevimli restoranlarga obuna bo‘ling va yangi postlarini kuzating.', 'Follow your favorite restaurants to see their latest posts.')} />}
-        {collection.isError && <div className="mt-5 space-y-3">{collection.data && <FormError message={friendlyError(collection.error)} />}<button type="button" className={secondaryClass} disabled={collection.isFetching} onClick={() => { if (collection.isFetchNextPageError) void collection.fetchNextPage(); else void collection.refetch(); }}>{c('Повторить', 'Qayta urinish', 'Try again')}</button></div>}
-        {collection.hasNextPage && !collection.isFetchNextPageError && <button type="button" disabled={collection.isFetching} onClick={() => void collection.fetchNextPage()} className={`${secondaryClass} mt-5 w-full`}>{collection.isFetchingNextPage ? c('Загружаем…', 'Yuklanmoqda…', 'Loading…') : c('Показать ещё', 'Yana ko‘rsatish', 'Load more')}<Icon name="down" className="size-4" /></button>}
-      </>}</div></section>
-      <aside className="space-y-5"><div className="rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface)] p-5"><h3 className="mb-5 text-sm font-semibold">{c('Настройки', 'Sozlamalar', 'Settings')}</h3><button type="button" onClick={() => setAddresses(true)} className="flex w-full items-center justify-between gap-3 border-b border-[var(--border)] pb-4 text-sm"><span className="flex items-center gap-3"><Icon name="location" className="text-orange-600" />{c('Мои адреса', 'Manzillarim', 'My addresses')}</span><Icon name="arrow" className="size-4 text-[var(--muted)]" /></button><div className="border-b border-[var(--border)] py-4"><p className="mb-3 flex items-center gap-3 text-sm"><Icon name="globe" className="text-orange-600" />{c('Язык', 'Til', 'Language')}</p><div className="flex gap-2">{(['ru', 'uz', 'en'] as const).map((value) => <button key={value} onClick={() => setLanguage(value)} aria-pressed={language === value} className={`flex-1 rounded-xl border py-2 text-xs font-semibold uppercase ${language === value ? 'border-orange-500 bg-[var(--surface)] text-orange-600' : 'border-[var(--border)] text-[var(--muted)]'}`}>{value}</button>)}</div></div><div className="py-4"><p className="mb-3 flex items-center gap-3 text-sm"><Icon name={theme === 'dark' ? 'moon' : 'sun'} className="text-orange-600" />{c('Оформление', 'Ko‘rinish', 'Appearance')}</p><div className="grid grid-cols-2 gap-2">{[{ value: 'light' as const, label: c('Светлое', 'Yorug‘', 'Light'), icon: 'sun' }, { value: 'dark' as const, label: c('Тёмное', 'Tungi', 'Dark'), icon: 'moon' }].map((option) => <button key={option.value} type="button" onClick={() => setTheme(option.value)} aria-pressed={theme === option.value} className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-xs ${theme === option.value ? 'border-orange-500 bg-[var(--surface)] text-orange-600' : 'border-[var(--border)] text-[var(--muted)]'}`}><Icon name={option.icon} className="size-4" />{option.label}</button>)}</div></div></div>
-        <div className="rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface)] p-5"><a href="https://t.me/skillworkdiscussion" target="_blank" rel="noopener noreferrer" className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-4 text-sm"><span className="flex items-center gap-3"><Icon name="help" size={22} className="shrink-0"/>{c('Поддержка', 'Yordam', 'Support')}</span><Icon name="arrow" className="size-4 text-[var(--muted)]" /></a><button onClick={() => setFaq(true)} className="flex w-full items-center justify-between gap-3 border-b border-[var(--border)] py-4 text-sm"><span className="flex items-center gap-3"><Icon name="shield" />{c('FAQ и документы', 'FAQ va hujjatlar', 'FAQ & documents')}</span><Icon name="arrow" className="size-4 text-[var(--muted)]" /></button><button type="button" onClick={() => setLogoutOpen(true)} className="flex w-full items-center gap-3 pt-4 text-sm text-red-500"><Icon name="logout" />{c('Выйти', 'Chiqish', 'Sign out')}</button></div><p className="px-2 text-center text-[10px] text-[var(--muted)]">UzBite v0.1.0</p>
-      </aside>
-    </div>
-    {notifications && <NotificationPanel onClose={() => setNotifications(false)}/>}
-    {editing && profile.data && <ProfileEditor profile={profile.data} onClose={() => setEditing(false)} />}{addresses && <AddressBook onClose={() => setAddresses(false)} />}{faq && <FaqDialog onClose={() => setFaq(false)} />}
-    {logoutOpen && <Modal title={c('Выйти из аккаунта?', 'Hisobdan chiqasizmi?', 'Sign out?')} onClose={() => setLogoutOpen(false)}><p className="mb-6 text-sm text-[var(--muted)]">{c('Вы сможете войти снова с тем же email и паролем.', 'Shu email va parol bilan qayta kirishingiz mumkin.', 'You can sign back in with your email and password.')}</p><FormError message={logout.error ? friendlyError(logout.error) : ''} /><div className="mt-5 flex gap-3"><button className={`${primaryClass} flex-1`} disabled={logout.isPending} onClick={() => logout.mutate()}>{c('Выйти', 'Chiqish', 'Sign out')}</button><button className={secondaryClass} onClick={() => setLogoutOpen(false)}>{c('Остаться', 'Qolish', 'Stay here')}</button></div></Modal>}
-  </div>;
-}
+  const person = profile.data ?? user;
+  const entries = [
+    { section: 'likes', icon: 'heart', label: c('Понравившиеся', 'Yoqtirilganlar', 'Liked posts'), value: profile.data?.counts.likes, screen: true },
+    { section: 'follows', icon: 'restaurant', label: c('Подписки', 'Obunalar', 'Following'), value: profile.data?.counts.follows, screen: true },
+    { section: 'orders', icon: 'history', label: c('История заказов', 'Buyurtmalar tarixi', 'Order history'), screen: true },
+    { section: 'addresses', icon: 'location', label: c('Мои адреса', 'Manzillarim', 'My addresses') },
+    { section: 'language', icon: 'globe', label: c('Язык', 'Til', 'Language'), value: languages[language], screen: true },
+    { section: 'appearance', icon: theme === 'dark' ? 'moon' : 'sun', label: c('Оформление', 'Ko‘rinish', 'Appearance'), value: theme === 'dark' ? dark : light, screen: true },
+  ];
+  const detail = entries.find(entry => entry.section === section && entry.screen);
 
-function EmptyCollection({ icon, title, text }: { icon: string; title: string; text: string }) {
-  const c = useCopy();
-  return <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5"><div className="flex items-start gap-3"><Icon name={icon} className="mt-0.5 shrink-0 text-brand" size={20}/><div className="min-w-0"><h3 className="text-sm font-semibold">{title}</h3><p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">{text}</p></div></div><Link to="/search" className={secondaryClass + ' mt-4 w-full'}>{c('Открыть рестораны', 'Restoranlarni ochish', 'Explore restaurants')}<Icon name="arrow" size={17}/></Link></div>;
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    detailTitle.current?.focus({ preventScroll: true });
+  }, [detail?.section]);
+
+  const avatar = useMutation({
+    mutationFn: (file: File) => {
+      const data = new FormData();
+      data.append('file', file);
+      return api.post('/uploads/avatar', data);
+    },
+    onSuccess: async () => {
+      await refreshUser();
+      void queryClient.invalidateQueries({ queryKey: ['profile'] });
+    },
+  });
+  const logout = useMutation({
+    mutationFn: () => api.post('/auth/logout'),
+    onSuccess: async () => {
+      queryClient.clear();
+      await refreshUser();
+      navigate('/auth', { replace: true });
+    },
+  });
+
+  function backToProfile() {
+    if (location.state?.fromProfileMenu === true) navigate(-1);
+    else navigate('/profile', { replace: true });
+  }
+
+  if (!user) return <div className="mx-auto max-w-lg px-6 py-20 text-center">
+    <h1 className="text-3xl font-semibold">{c('Ваш профиль', 'Profilingiz', 'Your profile')}</h1>
+    <p className="my-5 text-sm text-[var(--muted)]">{c('Войдите, чтобы сохранять любимое и управлять заказами.', 'Sevimlilarni saqlash va buyurtmalarni boshqarish uchun kiring.', 'Sign in to save your favorites and manage your orders.')}</p>
+    <Link className={primaryClass} to="/auth" state={{ from: '/profile' }}>{c('Войти', 'Kirish', 'Sign in')}</Link>
+  </div>;
+
+  if (detail) return <section className="profile-page" aria-labelledby="profile-detail-title">
+    <header className="profile-detail-header">
+      <button type="button" className="profile-back" onClick={backToProfile} aria-label={c('Вернуться в профиль', 'Profilga qaytish', 'Back to profile')}><Icon name="back" size={24}/></button>
+      <h1 id="profile-detail-title" ref={detailTitle} tabIndex={-1}>{detail.label}</h1>
+    </header>
+    {section === 'likes' && <ProfileLikes/>}
+    {section === 'follows' && <ProfileFollowing/>}
+    {section === 'orders' && <OrderHistory/>}
+    {section === 'language' && <div className="profile-options">
+      {(['ru', 'uz', 'en'] as const).map(value => <button key={value} type="button" aria-pressed={language === value} onClick={() => setLanguage(value)}>
+        <span>{languages[value]}</span>{language === value && <Icon name="check" size={21}/>}
+      </button>)}
+    </div>}
+    {section === 'appearance' && <div className="profile-options">
+      {([{ value: 'light', label: light, icon: 'sun' }, { value: 'dark', label: dark, icon: 'moon' }] as const).map(option => <button key={option.value} type="button" aria-pressed={theme === option.value} onClick={() => setTheme(option.value)}>
+        <Icon name={option.icon} size={21}/><span>{option.label}</span>{theme === option.value && <Icon name="check" size={21}/>}
+      </button>)}
+    </div>}
+  </section>;
+
+  const fromMenu = { fromProfileMenu: true };
+  return <div className="profile-page">
+    <header className="profile-page-header"><h1>{c('Профиль', 'Profil', 'Profile')}</h1></header>
+    <section className="profile-identity" aria-label={c('Аккаунт', 'Hisob', 'Account')}>
+      <div className="profile-identity-top">
+        <button type="button" className="profile-avatar" disabled={avatar.isPending} onClick={() => avatarInput.current?.click()} aria-label={c('Изменить фото', 'Rasmni o‘zgartirish', 'Change profile photo')}>
+          {person?.avatarUrl ? <img src={person.avatarUrl} alt=""/> : person?.username?.slice(0, 1).toUpperCase()}
+          <span><Icon name="camera" size={14}/></span>
+        </button>
+        <input ref={avatarInput} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={event => {
+          const file = event.target.files?.[0];
+          if (file) avatar.mutate(file);
+          event.target.value = '';
+        }}/>
+        <button type="button" onClick={() => setEditing(true)} disabled={!profile.data} className={secondaryClass}><Icon name="edit" size={17}/>{c('Редактировать', 'Tahrirlash', 'Edit profile')}</button>
+      </div>
+      <h2>{person?.username}</h2>
+      {person?.bio && <p className="profile-bio">{person.bio}</p>}
+      {avatar.isPending && <p role="status" className="mt-3 text-xs text-[var(--muted)]">{c('Загружаем фото…', 'Rasm yuklanmoqda…', 'Uploading photo…')}</p>}
+      <FormError message={avatar.error ? friendlyError(avatar.error) : ''}/>
+    </section>
+    {profile.isError && <div className="mb-5"><FormError message={friendlyError(profile.error)}/></div>}
+    <nav className="profile-menu" aria-label={c('Разделы профиля', 'Profil bo‘limlari', 'Profile sections')}>
+      {entries.map(entry => <Link key={entry.section} className="profile-menu-row" to={'/profile?section=' + entry.section} state={fromMenu}>
+        <Icon name={entry.icon} size={21} className="profile-menu-icon"/>
+        <span>{entry.label}</span><span className="profile-menu-value">{entry.value}</span>
+        <Icon name="chevron" size={16} className="profile-menu-chevron"/>
+      </Link>)}
+      <a className="profile-menu-row" href="https://t.me/skillworkdiscussion" target="_blank" rel="noopener noreferrer">
+        <Icon name="help" size={21} className="profile-menu-icon"/><span>{c('Поддержка', 'Yordam', 'Support')}</span>
+        <Icon name="chevron" size={16} className="profile-menu-chevron"/>
+      </a>
+      <Link className="profile-menu-row" to="/profile?section=help" state={fromMenu}>
+        <Icon name="shield" size={21} className="profile-menu-icon"/><span>{c('FAQ и документы', 'FAQ va hujjatlar', 'FAQ & documents')}</span>
+        <Icon name="chevron" size={16} className="profile-menu-chevron"/>
+      </Link>
+      <button type="button" className="profile-menu-row profile-menu-row--logout" onClick={() => setLogoutOpen(true)}>
+        <Icon name="logout" size={21}/><span>{c('Выйти', 'Chiqish', 'Sign out')}</span>
+      </button>
+    </nav>
+    {editing && profile.data && <ProfileEditor profile={profile.data} onClose={() => setEditing(false)}/>}
+    {section === 'addresses' && <AddressBook onClose={backToProfile}/>}
+    {section === 'help' && <FaqDialog onClose={backToProfile}/>}
+    {logoutOpen && <Modal title={c('Выйти из аккаунта?', 'Hisobdan chiqasizmi?', 'Sign out?')} onClose={() => setLogoutOpen(false)}>
+      <p className="mb-6 text-sm text-[var(--muted)]">{c('Вы сможете войти снова с тем же email и паролем.', 'Shu email va parol bilan qayta kirishingiz mumkin.', 'You can sign back in with your email and password.')}</p>
+      <FormError message={logout.error ? friendlyError(logout.error) : ''}/>
+      <div className="mt-5 flex gap-3"><button type="button" className={`${primaryClass} flex-1`} disabled={logout.isPending} onClick={() => logout.mutate()}>{c('Выйти', 'Chiqish', 'Sign out')}</button><button type="button" className={secondaryClass} onClick={() => setLogoutOpen(false)}>{c('Остаться', 'Qolish', 'Stay here')}</button></div>
+    </Modal>}
+  </div>;
 }
 
 function FaqDialog({ onClose }: { onClose: () => void }) {

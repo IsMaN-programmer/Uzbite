@@ -1,4 +1,4 @@
-import type { Language } from '@uzbite/shared';
+import type { CatalogCategory, Language } from '@uzbite/shared';
 
 const categories: Record<string, { uz: string; en: string; icon: string; tint: string; short?: string }> = {
   'Узбекская кухня': { uz: 'O‘zbekcha', en: 'Uzbek', icon: '🍛', tint: '#f4ecdf', short: 'Узбекская' },
@@ -16,7 +16,23 @@ const categories: Record<string, { uz: string; en: string; icon: string; tint: s
   'Рис': { uz: 'Guruch', en: 'Rice', icon: '🍚', tint: '#e9ecef' },
 };
 
-export const featuredCategories = ['Бургеры', 'Салаты', 'Узбекская кухня', 'Выпечка', 'Напитки', 'Пицца'];
+const catalogLabels: Record<CatalogCategory, Record<Language, string>> = {
+  NATIONAL: { ru: 'Национальное', uz: 'Milliy', en: 'National' },
+  FAST_FOOD: { ru: 'Фаст-фуд', uz: 'Fastfud', en: 'Fast food' },
+  FOREIGN: { ru: 'Зарубежное', uz: 'Xorijiy', en: 'International' },
+  EASTERN: { ru: 'Восточное', uz: 'Sharqona', en: 'Eastern' },
+  ASIAN: { ru: 'Азиатское', uz: 'Osiyo taomlari', en: 'Asian' },
+  DRINKS: { ru: 'Напитки', uz: 'Ichimliklar', en: 'Drinks' },
+  SALADS: { ru: 'Салаты', uz: 'Salatlar', en: 'Salads' },
+  MEAT: { ru: 'Мясное', uz: 'Go‘shtli', en: 'Meat' },
+  SNACKS: { ru: 'Закуски', uz: 'Gazaklar', en: 'Snacks' },
+  OTHER: { ru: 'Другое', uz: 'Boshqa', en: 'Other' },
+};
+
+export function catalogCategoryLabel(category: CatalogCategory, language: Language) {
+  return catalogLabels[category][language];
+}
+
 export function categoryLabel(name: string, language: Language, short = false) {
   const category = categories[name];
   return language === 'ru' ? (short ? category?.short ?? name : name) : category?.[language] ?? name;

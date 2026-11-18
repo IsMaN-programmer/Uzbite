@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { MediaType, PrismaClient } from '@prisma/client';
+import { CatalogCategory, MediaType, PrismaClient, type Dish } from '@prisma/client';
 
 const prisma = new PrismaClient();
 const photo = (id: number, width = 1200) => `https://images.pexels.com/photos/${id}/pexels-photo-${id}.jpeg?auto=compress&cs=tinysrgb&w=${width}`;
@@ -14,6 +14,33 @@ const galleries: Record<string, string[]> = {
   'rest-non': ['interior-tandir.jpg', 'restaurant-cover.jpg', 'interior-samarqand.jpg'],
   'rest-osh': ['restaurant-cover.jpg', 'interior-chorsu.jpg', 'interior-tandir.jpg', 'interior-samarqand.jpg'],
   'rest-saffron': ['interior-samarqand.jpg', 'interior-chorsu.jpg', 'restaurant-cover.jpg'],
+};
+const dishCategories: Partial<Record<string, CatalogCategory>> = {
+  'dish-plov': 'NATIONAL', 'dish-samsa': 'NATIONAL', 'dish-achichuk': 'SALADS',
+  'dish-pasta': 'FOREIGN', 'dish-pizza': 'FOREIGN', 'dish-salad': 'SALADS',
+  'dish-burger': 'FAST_FOOD', 'dish-double': 'FAST_FOOD', 'dish-fries': 'SNACKS',
+  'dish-coffee': 'DRINKS', 'dish-noodles': 'ASIAN', 'dish-roll': 'ASIAN', 'dish-rice': 'ASIAN',
+  'dish-curry': 'MEAT', 'dish-biryani': 'EASTERN', 'dish-tea': 'DRINKS',
+};
+const dishPortions: Partial<Record<string, Partial<Pick<Dish, 'weightGrams' | 'volumeMl' | 'piecesPerPortion' | 'diameterCm'>>>> = {
+  'dish-plov': { weightGrams: 350 },
+  'dish-samsa': { piecesPerPortion: 2 },
+  'dish-achichuk': { weightGrams: 180 },
+  'dish-pasta': { weightGrams: 300 },
+  'dish-pizza': { diameterCm: 30 },
+  'dish-salad': { weightGrams: 200 },
+  'dish-burger': { weightGrams: 260 },
+  'dish-fries': { weightGrams: 150 },
+  'dish-double': { weightGrams: 340 },
+  'dish-breakfast': { weightGrams: 280 },
+  'dish-croissant': { weightGrams: 75 },
+  'dish-coffee': { volumeMl: 250 },
+  'dish-noodles': { weightGrams: 320 },
+  'dish-roll': { piecesPerPortion: 8 },
+  'dish-rice': { weightGrams: 280 },
+  'dish-curry': { weightGrams: 320 },
+  'dish-biryani': { weightGrams: 350 },
+  'dish-tea': { volumeMl: 250 },
 };
 const restaurants = [
   {
@@ -106,10 +133,20 @@ async function main() {
         create: { id: categoryId, restaurantId: restaurant.id, name: dish.category, sortOrder: dishIndex },
         update: { name: dish.category },
       });
+      const dishData = {
+        categoryId,
+        catalogCategory: dishCategories[dish.id] ?? CatalogCategory.OTHER,
+        ...dishPortions[dish.id],
+        name: dish.name,
+        description: dish.description,
+        price: dish.price,
+        imageUrl: photo(dish.photo),
+        isAvailable: true,
+      };
       await prisma.dish.upsert({
         where: { id: dish.id },
-        create: { id: dish.id, restaurantId: restaurant.id, categoryId, name: dish.name, description: dish.description, price: dish.price, imageUrl: photo(dish.photo), isAvailable: true },
-        update: { name: dish.name, description: dish.description, price: dish.price, imageUrl: photo(dish.photo), isAvailable: true },
+        create: { id: dish.id, restaurantId: restaurant.id, ...dishData },
+        update: dishData,
       });
     }
 

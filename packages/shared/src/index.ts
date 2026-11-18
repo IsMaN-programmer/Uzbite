@@ -63,13 +63,23 @@ export interface RestaurantSummary {
   isFollowing: boolean;
   cardPaymentAvailable: boolean;
 }
+export const CATALOG_CATEGORIES = ['NATIONAL', 'FAST_FOOD', 'FOREIGN', 'EASTERN', 'ASIAN', 'DRINKS', 'SALADS', 'MEAT', 'SNACKS', 'OTHER'] as const;
+export type CatalogCategory = typeof CATALOG_CATEGORIES[number];
+export const DISCOVERY_SORTS = ['all', 'price-asc', 'price-desc', 'popular', 'rating'] as const;
+export type DiscoverySort = typeof DISCOVERY_SORTS[number];
+
 export interface Dish {
   id: string;
   restaurantId: string;
   categoryId: string;
+  catalogCategory: CatalogCategory;
   name: string;
   description: string;
   price: Money;
+  weightGrams: number | null;
+  volumeMl: number | null;
+  piecesPerPortion: number | null;
+  diameterCm: number | null;
   imageUrl: string;
   isAvailable: boolean;
 }
