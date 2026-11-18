@@ -20,7 +20,7 @@ export async function courierAccount(userId: string): Promise<CourierAccount> {
     id: user.id, email: user.email, phone: user.phone, avatarUrl: user.avatarUrl, role: 'COURIER',
     settings: { language: language(user.settings?.language), theme: theme(user.settings?.theme) },
     profile: {
-      firstName: profile.firstName, lastName: profile.lastName, approvalStatus: profile.approvalStatus, isTestAccount: profile.isTestAccount,
+      firstName: profile.firstName, lastName: profile.lastName, approvalStatus: profile.approvalStatus, rejectionReason: profile.rejectionReason, isTestAccount: profile.isTestAccount,
       workMode: profile.workMode, availability: courierAvailability(profile, affiliations, active?.id ?? null),
       city: profile.city, onboardingStep: profile.onboardingStep, onboardingCompleted: Boolean(profile.onboardingCompletedAt),
       permissions: courierPermissions(profile, affiliations),

@@ -136,9 +136,10 @@ const courierName = (profile: { firstName: string; lastName: string } | null) =>
 
 /** What the server currently allows. SUSPENDED blocks every mode. */
 export function courierPermissions(profile: Pick<CourierProfile, 'approvalStatus'>, activeAffiliations: number) {
-  if (profile.approvalStatus === 'SUSPENDED') return { restaurantMode: false, freelanceMode: false, reason: 'SUSPENDED' as string | null };
-  const restaurantMode = activeAffiliations > 0, freelanceMode = profile.approvalStatus === 'APPROVED';
-  return { restaurantMode, freelanceMode, reason: restaurantMode || freelanceMode ? null : 'NO_AFFILIATION_OR_APPROVAL' as string | null };
+  // Only a courier support approved works at all (PENDING, REJECTED, SUSPENDED get no orders);
+  // own-restaurant mode additionally needs the restaurant link.
+  if (profile.approvalStatus !== 'APPROVED') return { restaurantMode: false, freelanceMode: false, reason: profile.approvalStatus as string | null };
+  return { restaurantMode: activeAffiliations > 0, freelanceMode: true, reason: null as string | null };
 }
 type Readiness = Pick<CourierProfile, 'approvalStatus' | 'onboardingCompletedAt' | 'workMode' | 'city'>;
 /**
@@ -162,6 +163,7 @@ function eligibilityError(courier: CourierState | null, mode: DeliveryMode, rest
   if (!courier) return new ApiError(404, 'COURIER_NOT_FOUND', 'Курьер не найден');
   if (courier.approvalStatus === 'SUSPENDED') return new ApiError(403, 'COURIER_SUSPENDED', 'Аккаунт курьера заблокирован');
   if (!courier.onboardingCompletedAt) return new ApiError(409, 'ONBOARDING_INCOMPLETE', 'Курьер не завершил регистрацию');
+  if (courier.approvalStatus !== 'APPROVED') return new ApiError(403, 'NOT_APPROVED', 'Курьер ещё не одобрен поддержкой UzBite');
   if (mode === 'RESTAURANT_COURIER') {
     if (courier.workMode !== 'RESTAURANT') return new ApiError(409, 'WRONG_WORK_MODE', 'Курьер работает не в режиме «Свой ресторан»');
     if (!courier.affiliatedRestaurantIds.includes(restaurant.id)) return new ApiError(403, 'NOT_AFFILIATED', 'Курьер не привязан к этому ресторану');
@@ -970,10 +972,12 @@ export async function setCourierServiceArea(courierId: string, city: string) {
  * Platform admission (developer CLI for now). Suspension withdraws every open offer; approval puts
  * a free courier on duty at once, including the searches already open in their city.
  */
-export async function setCourierApproval(courierId: string, status: CourierApprovalStatus, options: { testAccount?: boolean } = {}) {
-  const suspend = status === 'SUSPENDED';
-  const profile = await changeCourierState(courierId, SYSTEM, suspend ? { reason: 'COURIER_SUSPENDED' } : null, (tx, out) => updateCourierProfile(tx, out, courierId, {
-    approvalStatus: status, ...(options.testAccount === undefined ? {} : { isTestAccount: options.testAccount }),
+export async function setCourierApproval(courierId: string, status: CourierApprovalStatus, options: { testAccount?: boolean; reason?: string | null } = {}) {
+  // Rejection and suspension take the courier off duty: every open offer is withdrawn.
+  const stop = status === 'SUSPENDED' || status === 'REJECTED';
+  const profile = await changeCourierState(courierId, SYSTEM, stop ? { reason: status === 'REJECTED' ? 'COURIER_REJECTED' : 'COURIER_SUSPENDED' } : null, (tx, out) => updateCourierProfile(tx, out, courierId, {
+    approvalStatus: status, approvalChangedAt: new Date(), rejectionReason: status === 'REJECTED' ? options.reason ?? null : null,
+    ...(options.testAccount === undefined ? {} : { isTestAccount: options.testAccount }),
   }));
   if (status === 'APPROVED') await matchCourierToOpenSearches(courierId).catch(() => 0);
   return profile;

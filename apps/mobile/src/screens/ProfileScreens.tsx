@@ -60,6 +60,7 @@ export function ProfileScreen() {
       </View>
       {/* No badge while admission is pending: the courier sees no "waiting for approval" warning. */}
       {profile.approvalStatus !== 'PENDING' ? <Badge tone={profile.approvalStatus === 'APPROVED' ? 'success' : 'danger'} text={t(`approval${profile.approvalStatus}`)} /> : null}
+      {profile.approvalStatus === 'REJECTED' && profile.rejectionReason ? <AppText muted>{t('rejectedReason', { v: profile.rejectionReason })}</AppText> : null}
       <PermissionNotice account={account} />
       {action.error ? <Banner tone="danger" text={action.error} /> : null}
 

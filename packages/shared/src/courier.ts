@@ -13,7 +13,7 @@ export type DeliveryOfferStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED
 export type CashCollectionStatus = 'NOT_APPLICABLE' | 'PENDING' | 'COLLECTED' | 'SETTLED';
 export type CourierRewardStatus = 'NONE' | 'ACCRUED' | 'CONFIRMED' | 'PAID';
 export type CourierWorkMode = 'RESTAURANT' | 'FREELANCE';
-export type CourierApprovalStatus = 'PENDING' | 'APPROVED' | 'SUSPENDED';
+export type CourierApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
 /** Server-computed: BUSY comes from a real accepted delivery and cannot be toggled by the client. */
 export type CourierAvailability = 'AVAILABLE' | 'UNAVAILABLE' | 'BUSY';
 export type DeliveryIssueType = 'CANCELLATION_REQUEST' | 'HANDOFF_CODE_UNAVAILABLE';
@@ -72,6 +72,8 @@ export interface CourierProfileDto {
   firstName: string;
   lastName: string;
   approvalStatus: CourierApprovalStatus;
+  /** Why support rejected the application (REJECTED only), shown to the courier. */
+  rejectionReason: string | null;
   isTestAccount: boolean;
   workMode: CourierWorkMode | null;
   /**

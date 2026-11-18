@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, rm, rmdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, rmdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
@@ -82,6 +82,12 @@ export async function storePrivateImage(userId: string, purpose: 'COURIER_FACE',
     await deletePrivateObject({ key });
     throw error;
   }
+}
+/** Bytes of a private file (local folder in development, private bucket otherwise), e.g. for support review. */
+export async function readPrivateObject(upload: Pick<Upload, 'key'>): Promise<Buffer> {
+  if (upload.key.startsWith(LOCAL_PREFIX)) return readFile(localPath(upload.key));
+  const object = await s3.send(new GetObjectCommand({ Bucket: env.S3_PRIVATE_BUCKET!, Key: upload.key }));
+  return Buffer.from(await object.Body!.transformToByteArray());
 }
 /** Removes the stored object only; the caller deletes the Upload row. Failures are not fatal. */
 export async function deletePrivateObject(upload: Pick<Upload, 'key'>) {

@@ -51,6 +51,8 @@ enum UploadPurpose {
 enum CourierApprovalStatus {
   PENDING
   APPROVED
+  /// Support rejected the application (admin panel); no orders.
+  REJECTED
   SUSPENDED
 }
 
@@ -456,6 +458,10 @@ model CourierProfile {
   firstName             String
   lastName              String                         @default("")
   approvalStatus        CourierApprovalStatus          @default(PENDING)
+  /// Why support rejected the application (shown to the courier).
+  rejectionReason       String?
+  /// When support last changed approvalStatus (null = never reviewed).
+  approvalChangedAt     DateTime?
   isTestAccount         Boolean                        @default(false)
   workMode              CourierWorkMode?
   /// Unused since 2026-11-18: availability is computed from permissions (no "accepting orders" switch).

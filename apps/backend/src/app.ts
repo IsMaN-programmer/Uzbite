@@ -15,6 +15,7 @@ import { notificationRouter } from './routes/notifications.js';
 import { uploadRouter } from './routes/uploads.js';
 import { courierRouter } from './routes/courier.js';
 import { restaurantRouter } from './routes/restaurant.js';
+import { adminPageRouter, adminRouter } from './routes/admin.js';
 import { errorHandler, notFound } from './utils/errors.js';
 
 export function createApp() {
@@ -31,6 +32,9 @@ export function createApp() {
     const ready = database && (env.NODE_ENV !== 'production' || redis.isReady);
     res.status(ready ? 200 : 503).json({ data: { status: ready ? (redis.isReady ? 'ok' : 'degraded') : 'unavailable', database: database ? 'connected' : 'unavailable', redis: redis.isReady ? 'connected' : 'unavailable', rateLimit: redis.isReady ? 'redis' : env.NODE_ENV === 'production' ? 'fail-closed' : 'process-memory-development-only', storage: storageReady, privateReceiptStorage: receiptStorageReady } });
   });
+  // Support panel: its own API and page, outside the customer session/CSRF chain (see routes/admin.ts).
+  app.use('/api/admin', rateLimit('admin', 600, 60), adminRouter);
+  app.use('/admin', adminPageRouter);
   app.use('/api', rateLimit('api', 1200, 60), csrfProtection, optionalAuth);
   app.use('/api/auth', authRouter);
   // Native apps (Bearer tokens): courier mobile app and the future restaurant Windows app.

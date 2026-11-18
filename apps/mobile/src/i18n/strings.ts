@@ -17,7 +17,7 @@ export const ru = {
   modeRESTAURANT: 'Свой ресторан', modeRESTAURANTText: 'Доставляете заказы ресторана, который пригласил вас по коду.', modeFREELANCE: 'Свободные доставки', modeFREELANCEText: 'Получаете заказы ресторанов вашего города.',
   inviteTitle: 'Код приглашения ресторана', inviteHint: 'Код из 8 символов выдаёт ресторан, например AB3K-7QXZ', inviteClaim: 'Проверить код', inviteFrom: 'Приглашение от ресторана «{name}»', inviteAccept: 'Принять', inviteReject: 'Отклонить', inviteLinked: 'Вы работаете с рестораном «{name}»',
   areaTitle: 'Город работы', areaCity: 'Город работы', areaHint: 'Город нужен для свободных доставок ресторанов. Заказы рядом подбираются по вашему местоположению, пока приложение открыто.',
-  approvalAPPROVED: 'Допущен к свободным доставкам', approvalSUSPENDED: 'Аккаунт заблокирован',
+  approvalAPPROVED: 'Одобрен поддержкой UzBite', approvalREJECTED: 'Заявка отклонена', rejectedReason: 'Причина: {v}', approvalSUSPENDED: 'Аккаунт заблокирован',
   permSUSPENDED: 'Аккаунт заблокирован. Обратитесь в поддержку.',
 
   tabHome: 'Главная', tabOffers: 'Заказы', tabHistory: 'История', tabProfile: 'Профиль',
@@ -87,7 +87,7 @@ export const uz: Record<TextKey, string> = {
   modeRESTAURANT: 'O‘z restoranim', modeRESTAURANTText: 'Sizni kod orqali taklif qilgan restoran buyurtmalarini yetkazasiz.', modeFREELANCE: 'Erkin yetkazishlar', modeFREELANCEText: 'Shahringizdagi restoranlar buyurtmalarini olasiz.',
   inviteTitle: 'Restoran taklif kodi', inviteHint: '8 belgili kodni restoran beradi, masalan AB3K-7QXZ', inviteClaim: 'Kodni tekshirish', inviteFrom: '«{name}» restoranidan taklif', inviteAccept: 'Qabul qilish', inviteReject: 'Rad etish', inviteLinked: 'Siz «{name}» restorani bilan ishlaysiz',
   areaTitle: 'Ish shahri', areaCity: 'Ish shahri', areaHint: 'Shahar restoranlarning erkin yetkazishlari uchun kerak. Yaqin buyurtmalar ilova ochiq paytda joylashuvingiz bo‘yicha tanlanadi.',
-  approvalAPPROVED: 'Erkin yetkazishlarga ruxsat berilgan', approvalSUSPENDED: 'Akkaunt bloklangan',
+  approvalAPPROVED: 'UzBite tomonidan tasdiqlangan', approvalREJECTED: 'Ariza rad etildi', rejectedReason: 'Sabab: {v}', approvalSUSPENDED: 'Akkaunt bloklangan',
   permSUSPENDED: 'Akkaunt bloklangan. Qo‘llab-quvvatlash xizmatiga murojaat qiling.',
 
   tabHome: 'Bosh sahifa', tabOffers: 'Buyurtmalar', tabHistory: 'Tarix', tabProfile: 'Profil',
@@ -156,7 +156,7 @@ export const en: Record<TextKey, string> = {
   modeRESTAURANT: 'Own restaurant', modeRESTAURANTText: 'Deliver orders of the restaurant that invited you with a code.', modeFREELANCE: 'Free deliveries', modeFREELANCEText: 'Receive orders from restaurants in your city.',
   inviteTitle: 'Restaurant invitation code', inviteHint: 'The restaurant gives you an 8-character code, e.g. AB3K-7QXZ', inviteClaim: 'Check code', inviteFrom: 'Invitation from “{name}”', inviteAccept: 'Accept', inviteReject: 'Decline', inviteLinked: 'You work with “{name}”',
   areaTitle: 'Work city', areaCity: 'Work city', areaHint: 'The city is used for restaurants’ free deliveries. Orders nearby are matched to your location while the app is open.',
-  approvalAPPROVED: 'Approved for free deliveries', approvalSUSPENDED: 'Account suspended',
+  approvalAPPROVED: 'Approved by UzBite support', approvalREJECTED: 'Application rejected', rejectedReason: 'Reason: {v}', approvalSUSPENDED: 'Account suspended',
   permSUSPENDED: 'Your account is suspended. Contact support.',
 
   tabHome: 'Home', tabOffers: 'Orders', tabHistory: 'History', tabProfile: 'Profile',
